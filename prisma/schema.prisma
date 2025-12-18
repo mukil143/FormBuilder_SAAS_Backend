@@ -1,0 +1,110 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+
+}
+
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum FieldType {
+  TEXT
+  EMAIL
+  NUMBER
+  TEXTAREA
+  DROPDOWN
+  CHECKBOX
+  RADIO
+  DATE
+}
+
+model User {
+  userId    String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+
+  form         Form[]
+  masterField  MasterField[]
+  formResponse FormResponse[]
+}
+
+model MasterField {
+  masterFieldId String    @id @default(uuid())
+  name          String
+  type          FieldType
+  options       Json? // for dropdown, checkbox, radio
+  userId        String
+  user          User      @relation(fields: [userId], references: [userId])
+
+  formField FormField[]
+}
+
+model Form {
+  formId      String   @id @default(uuid())
+  title       String
+  description String?
+  slug        String   @unique
+  isPublic    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  userId String
+  user   User   @relation(fields: [userId], references: [userId])
+
+  formField    FormField[]
+  formResponse FormResponse[]
+}
+
+model FormField {
+  formFieldId String  @id @default(uuid())
+  label       String
+  required    Boolean @default(false)
+  order       Int @default(0)
+  type        FieldType
+  options     Json? // for dropdown, checkbox, radio
+  formId String
+  form   Form   @relation(fields: [formId], references: [formId])
+
+  masterFieldId String?
+  masterField   MasterField?    @relation(fields: [masterFieldId], references: [masterFieldId])
+  responseValue ResponseValue[]
+}
+
+model FormResponse {
+  formResponseId String   @id @default(uuid())
+  createdAt      DateTime @default(now())
+
+  formId String
+  form   Form   @relation(fields: [formId], references: [formId])
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [userId])
+
+  responseValue ResponseValue[]
+}
+
+model ResponseValue {
+  responseValueId String @id @default(uuid())
+  value           Json?
+
+  formResponseId String
+  formResponse   FormResponse @relation(fields: [formResponseId], references: [formResponseId])
+
+  formFieldId String
+  formField   FormField @relation(fields: [formFieldId], references: [formFieldId])
+}
+
