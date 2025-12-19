@@ -16,7 +16,7 @@ app.get('/api/test', (req, res) => {
     });
 });
 
-app.use('/api/dashboard/master-fields',masterFields)
+app.use('/',masterFields)
 app.use('/',form)
 app.use('/',users)
 app.use('/',publicRoutes)
