@@ -161,9 +161,14 @@ router.delete('/api/dashboard/master-fields/:masterFieldId', async (req, res) =>
   try {
     const { masterFieldId } = req.params;
 
+    if( !masterFieldId ) {
+      return res.status(400).json({ message: 'Master field ID is required' });
+    }
     await prisma.masterField.delete({
-      where: { masterFieldId: id }
+      where: { masterFieldId }
     });
+
+
 
     res.status(200).json({ message: 'Master field deleted successfully' });
 

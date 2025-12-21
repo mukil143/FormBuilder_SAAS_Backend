@@ -42,6 +42,7 @@ model User {
   form         Form[]
   masterField  MasterField[]
   formResponse FormResponse[]
+  userReport   UserReport[]
 }
 
 model MasterField {
@@ -64,7 +65,7 @@ model Form {
   createdAt   DateTime @default(now())
   userId String
   user   User   @relation(fields: [userId], references: [userId])
-
+  sharedUrl String?
   formField    FormField[]
   formResponse FormResponse[]
 }
@@ -108,3 +109,11 @@ model ResponseValue {
   formField   FormField @relation(fields: [formFieldId], references: [formFieldId])
 }
 
+
+model UserReport{
+  reportId String @id @default(uuid())
+  userId String
+  reportData Json
+  createdAt DateTime @default(now())
+  user          User      @relation(fields: [userId], references: [userId])
+}
