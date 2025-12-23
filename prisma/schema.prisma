@@ -88,7 +88,7 @@ model FormField {
   type        FieldType
   options     Json? // for dropdown, checkbox, radio
   formId String
-  form   Form   @relation(fields: [formId], references: [formId])
+  form   Form   @relation(fields: [formId], references: [formId],onDelete: Cascade)
 
   masterFieldId String?
   masterField   MasterField?    @relation(fields: [masterFieldId], references: [masterFieldId])

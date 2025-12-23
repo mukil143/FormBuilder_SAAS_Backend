@@ -259,29 +259,31 @@ router.get("/api/dashboard/form/details/:formId", async (req, res) => {
 router.delete("/api/dashboard/form/:formId", async (req, res) => {
   try {
     const { formId } = req.params;
-
-    const form = await prisma.form.findUnique({
-      where: { formId },
-    });
-
-    if (!form) {
-      return res.status(404).json({
+    if (!formId) {
+      return res.status(400).json({
         success: false,
-        message: "Form not found",
+        message: "formId is required",
       });
     }
 
     await prisma.form.delete({
       where: { formId },
-    });
+    })
 
     return res
       .status(200)
       .json({ success: true, message: "Form deleted successfully" });
   } catch (error) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({
+        success: false,
+        message: "Form not found",
+      });
+    }
+    console.error(error);
     return res.status(404).json({
       success: false,
-      message: "Form not found",
+      message: "Internal server error",
     });
   }
 });
