@@ -56,7 +56,7 @@ router.get('/api/dashboard/user-report/:userId', async (req, res) => {
       where: { userId }
     });
 
-    if (!reports) {
+    if (reports.length === 0) {
       return res.status(404).json({ message: 'User reports not found' });
     }
     res.status(200).json({
