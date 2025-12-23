@@ -164,6 +164,7 @@ router.put("/api/dashboard/form/:formId", async (req, res) => {
       // Step B: Create new fields
       if (fields.length > 0) {
         const newFieldsData = fields.map((field, idx) => ({
+          formFieldId: field.formFieldId, // Optional: If you want to keep the same IDs
           label: field.label,
           required: field.required ?? false,
           order: idx,

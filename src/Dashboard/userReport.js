@@ -5,13 +5,14 @@ import { prisma } from '../config/db.js'
 
 /**
  * CREATE User Report
- * POST /api/dashboard/user-report
+ * POST /api/dashboard/user-report         
  * Body: { userId: String, reportData: Json }
  */
 
-router.post('/api/dashboard/user-report', async (req, res) => {
+router.post('/api/dashboard/user-report/:userId', async (req, res) => {
   try {
-    const { userId, reportData } = req.body;
+    const { userId } = req.params;
+    const { reportData } = req.body;
 
     if (!userId || !reportData) {
       return res.status(400).json({ message: 'Missing required fields' });

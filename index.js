@@ -5,6 +5,8 @@ import masterFields from './src/Dashboard/masterFields.js'
 import form from './src/Dashboard/form.js'
 import users from './src/UserRoutes/user.js'
 import publicRoutes from './src/Dashboard/public.js'
+import userReport from './src/Dashboard/userReport.js'
+import AdminReport from './src/AdminRoutes/adminReport.js'
 
 app.use(cors());              // Enable CORS
 app.use(express.json());      // Parse JSON body
@@ -20,6 +22,9 @@ app.use('/',masterFields)
 app.use('/',form)
 app.use('/',users)
 app.use('/',publicRoutes)
+app.use('/',userReport)
+app.use('/',AdminReport)
+
 
 
 
