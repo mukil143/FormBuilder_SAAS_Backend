@@ -32,11 +32,14 @@ enum FieldType {
 }
 
 enum ReportStatus {
-  Rised
-  InProgress
-  Resolved
-  Closed
+  RISED
+  INPROGRESS
+  RESOLVED
+  CLOSED
+  REJECTED
 }
+
+
 
 model User {
   userId    String   @id @default(uuid())
@@ -123,6 +126,6 @@ model UserReport{
   reportData Json
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  status ReportStatus @default(Rised)
+  status ReportStatus @default(RISED)
   user          User      @relation(fields: [userId], references: [userId])
 }

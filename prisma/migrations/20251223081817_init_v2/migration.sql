@@ -4,6 +4,9 @@ CREATE TYPE "Role" AS ENUM ('ADMIN', 'USER');
 -- CreateEnum
 CREATE TYPE "FieldType" AS ENUM ('TEXT', 'EMAIL', 'NUMBER', 'TEXTAREA', 'DROPDOWN', 'CHECKBOX', 'RADIO', 'DATE');
 
+-- CreateEnum
+CREATE TYPE "ReportStatus" AS ENUM ('RISED', 'INPROGRESS', 'RESOLVED', 'CLOSED', 'REJECTED');
+
 -- CreateTable
 CREATE TABLE "User" (
     "userId" TEXT NOT NULL,
@@ -36,6 +39,7 @@ CREATE TABLE "Form" (
     "isPublic" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "userId" TEXT NOT NULL,
+    "sharedUrl" TEXT,
 
     CONSTRAINT "Form_pkey" PRIMARY KEY ("formId")
 );
@@ -45,7 +49,9 @@ CREATE TABLE "FormField" (
     "formFieldId" TEXT NOT NULL,
     "label" TEXT NOT NULL,
     "required" BOOLEAN NOT NULL DEFAULT false,
-    "order" INTEGER NOT NULL,
+    "order" INTEGER NOT NULL DEFAULT 0,
+    "type" "FieldType" NOT NULL,
+    "options" JSONB,
     "formId" TEXT NOT NULL,
     "masterFieldId" TEXT,
 
@@ -70,6 +76,18 @@ CREATE TABLE "ResponseValue" (
     "formFieldId" TEXT NOT NULL,
 
     CONSTRAINT "ResponseValue_pkey" PRIMARY KEY ("responseValueId")
+);
+
+-- CreateTable
+CREATE TABLE "UserReport" (
+    "reportId" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "reportData" JSONB NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "status" "ReportStatus" NOT NULL DEFAULT 'RISED',
+
+    CONSTRAINT "UserReport_pkey" PRIMARY KEY ("reportId")
 );
 
 -- CreateIndex
@@ -101,3 +119,6 @@ ALTER TABLE "ResponseValue" ADD CONSTRAINT "ResponseValue_formResponseId_fkey" F
 
 -- AddForeignKey
 ALTER TABLE "ResponseValue" ADD CONSTRAINT "ResponseValue_formFieldId_fkey" FOREIGN KEY ("formFieldId") REFERENCES "FormField"("formFieldId") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "UserReport" ADD CONSTRAINT "UserReport_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("userId") ON DELETE RESTRICT ON UPDATE CASCADE;
