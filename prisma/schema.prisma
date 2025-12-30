@@ -61,7 +61,7 @@ model MasterField {
   type          FieldType
   options       Json? // for dropdown, checkbox, radio
   userId        String
-  user          User      @relation(fields: [userId], references: [userId])
+  user          User      @relation(fields: [userId], references: [userId],onDelete: Cascade)
 
   formField FormField[]
 }
@@ -74,7 +74,7 @@ model Form {
   isPublic    Boolean  @default(false)
   createdAt   DateTime @default(now())
   userId String
-  user   User   @relation(fields: [userId], references: [userId])
+  user   User   @relation(fields: [userId], references: [userId],onDelete: Cascade)
   sharedUrl String?
   formField    FormField[]
   formResponse FormResponse[]
@@ -91,7 +91,7 @@ model FormField {
   form   Form   @relation(fields: [formId], references: [formId],onDelete: Cascade)
 
   masterFieldId String?
-  masterField   MasterField?    @relation(fields: [masterFieldId], references: [masterFieldId])
+  masterField   MasterField?    @relation(fields: [masterFieldId], references: [masterFieldId],onDelete: SetNull)
   responseValue ResponseValue[]
 }
 
@@ -100,10 +100,10 @@ model FormResponse {
   createdAt      DateTime @default(now())
 
   formId String
-  form   Form   @relation(fields: [formId], references: [formId])
+  form   Form   @relation(fields: [formId], references: [formId],onDelete: Cascade)
 
   userId String?
-  user   User?   @relation(fields: [userId], references: [userId])
+  user   User?   @relation(fields: [userId], references: [userId],onDelete: Cascade)
 
   responseValue ResponseValue[]
 }
@@ -113,10 +113,10 @@ model ResponseValue {
   value           Json?
 
   formResponseId String
-  formResponse   FormResponse @relation(fields: [formResponseId], references: [formResponseId])
+  formResponse   FormResponse @relation(fields: [formResponseId], references: [formResponseId],onDelete: Cascade)
 
   formFieldId String
-  formField   FormField @relation(fields: [formFieldId], references: [formFieldId])
+  formField   FormField @relation(fields: [formFieldId], references: [formFieldId] ,onDelete: Cascade)
 }
 
 
@@ -127,5 +127,5 @@ model UserReport{
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   status ReportStatus @default(RISED)
-  user          User      @relation(fields: [userId], references: [userId])
+  user          User      @relation(fields: [userId], references: [userId],onDelete: Cascade)
 }

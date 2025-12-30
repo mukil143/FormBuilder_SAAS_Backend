@@ -7,7 +7,7 @@ import users from './src/UserRoutes/user.js'
 import publicRoutes from './src/Dashboard/public.js'
 import userReport from './src/Dashboard/userReport.js'
 import AdminReport from './src/AdminRoutes/adminReport.js'
-
+import AdminUser from './src/AdminRoutes/adminUser.js'
 app.use(cors());              // Enable CORS
 app.use(express.json());      // Parse JSON body
 
@@ -24,6 +24,7 @@ app.use('/',users)
 app.use('/',publicRoutes)
 app.use('/',userReport)
 app.use('/',AdminReport)
+app.use('/',AdminUser)
 
 
 

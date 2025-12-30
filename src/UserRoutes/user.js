@@ -9,6 +9,24 @@ const router = express.Router();
 router.post("/api/users/register", async (req, res) => {
   try {
     const { name, email, password } = req.body;
+    if (!name || !email || !password) {
+      return res
+        .status(400)
+        .json({ message: "Name, email, and password are required" });
+    }
+
+    if (password.length < 6) {
+      return res
+        .status(400)
+        .json({ message: "Password must be at least 6 characters" });
+    }
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (existingUser) {
+      return res.status(400).json({ message: "User already exists" });
+    }
 
     const user = await prisma.user.create({
       data: {
@@ -18,7 +36,8 @@ router.post("/api/users/register", async (req, res) => {
       },
     });
 
-    res.status(201).json(user);
+
+    res.status(201).json({ message: "User created successfully", user });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -62,14 +81,14 @@ router.post("/api/users/login", async (req, res) => {
  * READ - Get All Users
  * GET /users
  */
-router.get("/api/users", async (req, res) => {
-  try {
-    const users = await prisma.user.findMany();
-    res.status(200).json(users);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+// router.get("/api/users", async (req, res) => {
+//   try {
+//     const users = await prisma.user.findMany();
+//     res.status(200).json(users);
+//   } catch (error) {
+//     res.status(500).json({ error: error.message });
+//   }
+// });
 
 /**
  * READ - Get User By ID
