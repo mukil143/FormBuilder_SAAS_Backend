@@ -4,7 +4,7 @@ const app = express();
 import masterFields from './src/Dashboard/masterFields.js'
 import form from './src/Dashboard/form.js'
 import users from './src/UserRoutes/user.js'
-import publicRoutes from './src/Dashboard/public.js'
+import publicRoutes from './src/publicRoutes/public.js'
 import userReport from './src/Dashboard/userReport.js'
 import AdminReport from './src/AdminRoutes/adminReport.js'
 import AdminUser from './src/AdminRoutes/adminUser.js'
