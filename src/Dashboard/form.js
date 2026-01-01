@@ -29,7 +29,7 @@ router.post("/api/dashboard/form",[protect] ,async (req, res) => {
         slug,
         isPublic: isPublic ?? false,
         userId,
-        sharedUrl: `https://formbuilder-saas-backend.onrender.com/api/dashboard/public/form/${slug}`,
+        sharedUrl: `https://formbuilder-saas-backend.onrender.com/api/public/form/${slug}`,
         formField: {
           create: fields?.map((field, idx) => ({
             label: field.label,

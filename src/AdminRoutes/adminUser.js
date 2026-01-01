@@ -175,4 +175,61 @@ router.delete("/api/admin/users/:id", [protect,admin],async (req, res) => {
   }
 });
 
+
+/**
+ * GET USER BY ID
+ * GET /api/admin/users/:id
+ * Access Control: Admin
+ */
+
+router.get("/api/admin/users/:id", [protect,admin],async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await prisma.user.findUnique({
+      where: {
+        userId: id,
+      },
+      select: {
+        userId: true,
+        name: true,
+        email: true,
+        role: true,
+        createdAt: true,
+        form :{
+          select:{
+            formId: true,
+            title: true,
+            description: true,
+          }
+        }
+      },
+    });
+
+    if(!user){
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      })
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "User fetched successfully",
+      user,
+    })
+
+
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    })
+  }
+});
+
+
+
 export default router
