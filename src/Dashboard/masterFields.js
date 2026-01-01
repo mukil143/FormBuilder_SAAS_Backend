@@ -1,22 +1,24 @@
 import express from 'express';
 const router = express.Router();
 import { prisma } from '../config/db.js'
+import { admin, protect } from '../Middleware/authMiddleware.js';
 
 
 // ============================
 // CREATE Master Field
 // ============================
-router.post('/api/dashboard/master-fields', async (req, res) => {
+router.post('/api/dashboard/master-fields', [protect],async (req, res) => {
   try {
-    const { name, type, userId , options} = req.body;
+    const { userId } = req.user;
+    const { label, type , options} = req.body;
 
-    if (!name || !type || !userId) {
-      return res.status(400).json({ message: 'Missing required fields' });
+    if (!label || !type || !userId) {
+      return res.status(400).json({success: false,message: 'Missing required fields' });
     }
 
     if( type === 'DROPDOWN' || type === 'CHECKBOX' || type === 'RADIO') {
       if(!options || !Array.isArray(options) || options.length === 0) {
-        return res.status(400).json({ message: `Options are required for field type ${type} and must be a non-empty array.` });
+        return res.status(400).json({ success: false, message: `Options are required for field type ${type} and must be a non-empty array.` });
       }
     }
 
@@ -29,18 +31,18 @@ router.post('/api/dashboard/master-fields', async (req, res) => {
 
 
     if (!['TEXT', 'EMAIL', 'NUMBER', 'TEXTAREA', 'DROPDOWN', 'CHECKBOX', 'RADIO', 'DATE'].includes(type)) {
-      return res.status(400).json({ message: 'Invalid field type, must be one of: (TEXT, EMAIL, NUMBER, TEXTAREA, DROPDOWN, CHECKBOX, RADIO, DATE)' });
+      return res.status(400).json({success: false, message: 'Invalid field type, must be one of: (TEXT, EMAIL, NUMBER, TEXTAREA, DROPDOWN, CHECKBOX, RADIO, DATE)' });
     }
 
     const user = await prisma.user.findUnique({ where: { userId } });
 
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ success: false,message: 'User not found' });
     }
 
     const masterField = await prisma.masterField.create({
       data: {
-        name,
+        label,
         type,
         userId,
         options: options || null
@@ -53,7 +55,7 @@ router.post('/api/dashboard/master-fields', async (req, res) => {
       data: masterField
     });
   } catch (error) {
-    res.status(500).json({ message: 'Failed to create master field', error: error.message });
+    res.status(500).json({success: false, message: 'Failed to create master field', error: error.message });
   }
 });
 
@@ -61,19 +63,20 @@ router.post('/api/dashboard/master-fields', async (req, res) => {
 // ============================
 // READ all Master Fields by User
 // ============================
-router.get('/api/dashboard/master-fields/user/:userId', async (req, res) => {
+router.get('/api/dashboard/master-fields',[protect], async (req, res) => {
   try {
-    const { userId } = req.params;
+    const { userId } = req.user;
     if (!userId) {
-      return res.status(400).json({ message: 'User ID is required' });
+      return res.status(400).json({ success: false,message: 'User ID is required' });
     }
     const masterFields = await prisma.masterField.findMany({
       where: { userId }
     });
 
-    if (!masterFields) {
-      return res.status(404).json({ message: 'Master fields not found' });
+    if (masterFields.length === 0) {
+      return res.status(404).json({ success: false, message: 'Master fields not found' });
     }
+
 
     res.status(200).json({
       success: true,
@@ -81,7 +84,7 @@ router.get('/api/dashboard/master-fields/user/:userId', async (req, res) => {
       data: masterFields
     });
   } catch (error) {
-    res.status(500).json({ message: 'Failed to fetch master fields', error: error.message });
+    res.status(500).json({success: false, message: 'Failed to fetch master fields', error: error.message });
   }
 });
 
@@ -89,8 +92,9 @@ router.get('/api/dashboard/master-fields/user/:userId', async (req, res) => {
 // ============================
 // READ single Master Field by ID
 // ============================
-router.get('/api/dashboard/master-fields/:masterFieldId', async (req, res) => {
+router.get('/api/dashboard/master-fields/:masterFieldId', [protect],async (req, res) => {
   try {
+    const { userId } = req.user;
     const { masterFieldId } = req.params;
 
     const masterField = await prisma.masterField.findUnique({
@@ -98,8 +102,13 @@ router.get('/api/dashboard/master-fields/:masterFieldId', async (req, res) => {
     });
 
     if (!masterField) {
-      return res.status(404).json({ message: 'Master field not found' });
+      return res.status(404).json({ success: false,message: 'Master field not found' });
     }
+
+    if( masterField.userId !== userId ) {
+      return res.status(403).json({success: false,message: 'You are not authorized to view this master field' });
+    }
+
 
     res.status(200).json({
       success: true,
@@ -107,7 +116,7 @@ router.get('/api/dashboard/master-fields/:masterFieldId', async (req, res) => {
       data: masterField
     });
   } catch (error) {
-    res.status(500).json({ message: 'Failed to fetch master field', error: error.message });
+    res.status(500).json({ success: false,message: 'Failed to fetch master field', error: error.message });
   }
 });
 
@@ -115,31 +124,56 @@ router.get('/api/dashboard/master-fields/:masterFieldId', async (req, res) => {
 // ============================
 // UPDATE Master Field
 // ============================
-router.put('/api/dashboard/master-fields/:masterFieldId', async (req, res) => {
+router.put('/api/dashboard/master-fields/:masterFieldId', [protect],async (req, res) => {
   try {
+    const { userId } = req.user;
     const { masterFieldId } = req.params;
-    const { name, type } = req.body;
+    const { label, type , options } = req.body;
     if( !masterFieldId ) {
-      return res.status(400).json({ message: 'Master field ID is required' });
+      return res.status(400).json({ success: false, message: 'Master field ID is required' });
     }
-    if (!name || !type) {
-      return res.status(400).json({ message: 'Missing required fields' });
+    if (!label || !type) {
+      return res.status(400).json({ success: false,message: 'Missing required fields' });
     }
 
     if (!['TEXT', 'EMAIL', 'NUMBER', 'TEXTAREA', 'DROPDOWN', 'CHECKBOX', 'RADIO', 'DATE'].includes(type)) {
-      return res.status(400).json({ message: 'Invalid field type must be one of: (TEXT, EMAIL, NUMBER, TEXTAREA, DROPDOWN, CHECKBOX, RADIO, DATE)' });
+      return res.status(400).json({ success: false, message: 'Invalid field type must be one of: (TEXT, EMAIL, NUMBER, TEXTAREA, DROPDOWN, CHECKBOX, RADIO, DATE)' });
+    }
+
+    if(type === 'TEXTAREA' || type === 'TEXT' || type === 'EMAIL' || type === 'NUMBER' || type === 'DATE') {
+      if(options) {
+        return res.status(400).json({ success: false, message: `Cannot set options for field type ${type}` });
+      }
     }
 
 
     if(type === 'DROPDOWN' || type === 'CHECKBOX' || type === 'RADIO') {
-      return res.status(400).json({ message: `Cannot change field type to ${type} as it requires options. Please create a new master field instead.` });
+      if(!options || !Array.isArray(options) || options.length === 0) {
+        return res.status(400).json({ success: false, message: `Options are required for field type ${type} and must be a non-empty array.` });
+      }
+    }
+
+
+
+
+    const masterField = await prisma.masterField.findUnique({
+      where: { masterFieldId: masterFieldId }
+    });
+
+    if (!masterField) {
+      return res.status(404).json({success: false, message: 'Master field not found' });
+    }
+
+    if( masterField.userId !== userId ) {
+      return res.status(403).json({success: false,message: 'You are not authorized to update this master field' });
     }
 
     const updated = await prisma.masterField.update({
       where: { masterFieldId: masterFieldId },
       data: {
-        name,
-        type
+        label,
+        type,
+        options: options || null
       }
     });
 
@@ -149,7 +183,7 @@ router.put('/api/dashboard/master-fields/:masterFieldId', async (req, res) => {
       data: updated
     });
   } catch (error) {
-    res.status(404).json({ message: 'Master field not found or update failed' });
+    res.status(404).json({success: false,message: 'Master field not found or update failed' });
   }
 });
 
@@ -157,23 +191,38 @@ router.put('/api/dashboard/master-fields/:masterFieldId', async (req, res) => {
 // ============================
 // DELETE Master Field
 // ============================
-router.delete('/api/dashboard/master-fields/:masterFieldId', async (req, res) => {
+router.delete('/api/dashboard/master-fields/:masterFieldId', [protect],async (req, res) => {
   try {
+    const { userId } = req.user;
     const { masterFieldId } = req.params;
 
     if( !masterFieldId ) {
-      return res.status(400).json({ message: 'Master field ID is required' });
+      return res.status(400).json({ success: false,message: 'Master field ID is required' });
     }
+
+
+    const masterField = await prisma.masterField.findUnique({
+      where: { masterFieldId: masterFieldId }
+    });
+
+    if (!masterField) {
+      return res.status(404).json({success: false,message: 'Master field not found' });
+    }
+
+    if( masterField.userId !== userId ) {
+      return res.status(403).json({ success: false,message: 'You are not authorized to delete this master field' });
+    }
+
     await prisma.masterField.delete({
       where: { masterFieldId }
     });
 
 
 
-    res.status(200).json({ message: 'Master field deleted successfully' });
+    res.status(200).json({success: true, message: 'Master field deleted successfully' });
 
   } catch (error) {
-    res.status(404).json({ message: 'Master field not found' });
+    res.status(404).json({ success: false,message: 'Master field not found' });
   }
 });
 

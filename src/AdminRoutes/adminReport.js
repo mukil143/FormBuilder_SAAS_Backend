@@ -1,6 +1,7 @@
 import express from 'express';
 const router = express.Router();
 import { prisma } from '../config/db.js'
+import { admin, protect } from '../Middleware/authMiddleware.js';
 
 
 /**
@@ -8,9 +9,9 @@ import { prisma } from '../config/db.js'
  * GET /api/dashboard/admin/user-reports
  * Query Params: userId (Admin's userId)
  */
-router.get('/api/dashboard/admin/user-reports', async (req, res) => {
+router.get('/api/dashboard/admin/user-reports', [protect,admin],async (req, res) => {
   try {
-    const { userId } = req.query;
+    const { userId } = req.user;
 
     if (!userId) {
       return res.status(400).json({ message: 'User ID is required' });
@@ -40,7 +41,7 @@ router.get('/api/dashboard/admin/user-reports', async (req, res) => {
  * Body: { status: ReportStatus }
  * Params: reportId
  */
-router.patch('/api/dashboard/admin/user-report/:reportId/status', async (req, res) => {
+router.patch('/api/dashboard/admin/user-report/:reportId/status',[protect,admin], async (req, res) => {
   try {
     const { reportId } = req.params;
     const { status } = req.body;

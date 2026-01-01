@@ -1,5 +1,7 @@
 import express from "express";
 import { prisma } from "../config/db.js";
+import generateToken from "../utils/generateToken.js";
+import { protect } from "../Middleware/authMiddleware.js";
 const router = express.Router();
 
 /**
@@ -33,6 +35,13 @@ router.post("/api/users/register", async (req, res) => {
         name,
         email,
         password,
+      },
+      select: {
+        userId: true,
+        name: true,
+        email: true,
+        role: true,
+        createdAt: true,
       },
     });
 
@@ -68,7 +77,9 @@ router.post("/api/users/login", async (req, res) => {
     if (user.password !== password) {
       return res.status(401).json({ message: "Invalid password" });
     }
-    return res.status(200).json({ message: "Login successful", user });
+
+    const token = await generateToken(user);
+    return res.status(200).json({ message: "Login successful", user, token });
   } catch (error) {
     console.error(error);
     return res
@@ -91,26 +102,34 @@ router.post("/api/users/login", async (req, res) => {
 // });
 
 /**
- * READ - Get User By ID
+ * READ - Get User profile By ID
  * GET /users/:id
  */
-router.get("/api/users/:userId", async (req, res) => {
+router.get("/api/users/profile",[protect], async (req, res) => {
   try {
-    const { userId } = req.params;
+    const { userId } = req.user;
 
     const user = await prisma.user.findUnique({
       where: {
         userId: userId,
       },
+      select: {
+        userId: true,
+        name: true,
+        email: true,
+        role: true,
+        createdAt: true,
+      },
     });
 
-    if (!user) {
+    if (user === null || user === undefined || user === "" || !user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    res.status(200).json(user);
+    res.status(200).json({success: true, message: "User profile fetched successfully", data: user});
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({success: false, message: "Internal server error", error: error.message });
   }
 });
 
@@ -118,31 +137,43 @@ router.get("/api/users/:userId", async (req, res) => {
  * UPDATE - Update User
  * PUT /users/:id
  */
-router.put("/api/users/:userId", async (req, res) => {
+router.put("/api/users/profile/update", [protect],async (req, res) => {
   try {
-    const { userId } = req.params;
-    const { name, email, password } = req.body;
+    const { userId } = req.user;
+    const { name, email } = req.body;
+
 
     const user = await prisma.user.update({
       where: {
         userId: userId,
       },
+
       data: {
         name,
         email,
-        password,
       },
+      select: {
+        userId: true,
+        name: true,
+        email: true,
+        role: true,
+        createdAt: true,
+      }
     });
 
-    console.log(user);
 
     if(!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    res.status(200).json(user);
+    res.status(200).json({
+      success: true,
+      message: "User updated successfully",
+      data: user
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json({success: false, message: "Internal server error", error: error.message });
   }
 });
 
@@ -150,9 +181,9 @@ router.put("/api/users/:userId", async (req, res) => {
  * DELETE - Delete User
  * DELETE /users/:id
  */
-router.delete("/api/users/:userId", async (req, res) => {
+router.delete("/api/users/profile/delete", [protect],async (req, res) => {
   try {
-    const { userId } = req.params;
+    const { userId } = req.user;
 
     await prisma.user.delete({
       where: {
@@ -160,9 +191,9 @@ router.delete("/api/users/:userId", async (req, res) => {
       },
     });
 
-    res.status(200).json({ message: "User deleted successfully" });
+    res.status(200).json({success: true, message: "User deleted successfully" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({success: false, message: "Internal server error", error: error.message });
   }
 });
 export default router;

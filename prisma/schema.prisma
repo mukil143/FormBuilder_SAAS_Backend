@@ -57,7 +57,7 @@ model User {
 
 model MasterField {
   masterFieldId String    @id @default(uuid())
-  name          String
+  label          String
   type          FieldType
   options       Json? // for dropdown, checkbox, radio
   userId        String

@@ -1,12 +1,14 @@
 import express from "express";
 import { prisma } from "../config/db.js";
+import { protect } from "../Middleware/authMiddleware.js";
 const router = express.Router();
 /**
  * CREATE FORM
  */
-router.post("/api/dashboard/form", async (req, res) => {
+router.post("/api/dashboard/form",[protect] ,async (req, res) => {
   try {
-    const { title, description, isPublic, userId, fields } = req.body;
+    const { userId } = req.user;
+    const { title, description, isPublic, fields } = req.body;
 
     if (!title || !userId) {
       return res.status(400).json({
@@ -61,11 +63,12 @@ router.post("/api/dashboard/form", async (req, res) => {
 
 /**
  * GET Forms by User ID
+ * GET /api/dashboard/forms
  */
 
-router.get("/api/dashboard/form/:userId", async (req, res) => {
+router.get("/api/dashboard/forms",[protect], async (req, res) => {
   try {
-    const { userId } = req.params;
+    const { userId } = req.user;
 
     const forms = await prisma.form.findMany({
       where: { userId },
@@ -97,25 +100,151 @@ router.get("/api/dashboard/form/:userId", async (req, res) => {
  * UPDATE FORM
  */
 
-router.put("/api/dashboard/form/:formId", async (req, res) => {
+// router.put("/api/dashboard/form/:formId", [protect],async (req, res) => {
+//   try {
+//     const { userId } = req.user;
+//     const { formId } = req.params;
+//     console.log(req.params);
+//     const { title, description, isPublic, fields } = req.body;
+//     if (!formId) {
+//       return res
+//         .status(400)
+//         .json({ success: false, message: "formId is required" });
+//     }
+
+//     if (Array.isArray(fields)) {
+//       for (const field of fields) {
+//         if (["DROPDOWN", "CHECKBOX", "RADIO"].includes(field.type)) {
+//           // ❌ ERROR: If options is undefined OR not an array OR empty
+//           if (
+//             !field.options ||
+//             !Array.isArray(field.options) ||
+//             field.options.length === 0
+//           ) {
+//             return res.status(400).json({
+//               success: false,
+//               message: `Options are required for field type ${field.type} and must be a non-empty array.`,
+//             });
+//           }
+//         }
+//       }
+//     }
+
+
+
+//     const form = await prisma.form.findUnique({ where: { formId } });
+
+//     if (form === null || form === undefined) {
+//       return res
+//         .status(404)
+//         .json({ success: false, message: "Form not found" });
+//     }
+
+//     if (form.userId !== userId) {
+//       return res
+//         .status(401)
+//         .json({ success: false, message: "Not authorized" });
+//     }
+
+//     const slug = title
+//       .toLowerCase()
+//       .replace(/[^a-z0-9]+/g, "-")
+//       .replace(/(^-|-$)/g, "");
+
+//     // 1. Prepare the operations array for the transaction
+//     const transactionOperations = [];
+
+//     // 2. Add Form Update Operation
+//     transactionOperations.push(
+//       prisma.form.update({
+//         where: { formId },
+//         data: {
+//           title,
+//           description,
+//           isPublic,
+//           slug,
+//           sharedUrl: `https://formbuilder-saas-backend.onrender.com/api/dashboard/public/form/${slug}`,
+//         },
+//       })
+//     );
+
+//     // 3. Handle Fields Logic (Delete + Create)
+//     if (Array.isArray(fields)) {
+//       // Step A: Delete existing fields
+//       transactionOperations.push(
+//         prisma.formField.deleteMany({ where: { formId } })
+//       );
+
+//       // Step B: Create new fields
+//       if (fields.length > 0) {
+//         const newFieldsData = fields.map((field, idx) => ({
+//           formFieldId: field.formFieldId ? field.formFieldId : undefined  , // Optional: If you want to keep the same IDs
+//           label: field.label,
+//           required: field.required ?? false,
+//           order: idx,
+//           type: field.type,
+//           options: Array.isArray(field.options) ? field.options : [],
+//           formId: formId, // Link to the form
+//           masterFieldId: field.masterFieldId || null,
+//         }));
+
+//         transactionOperations.push(
+//           prisma.formField.createMany({ data: newFieldsData })
+//         );
+//       }
+//     }
+
+//     // 4. EXECUTE TRANSACTION (All or Nothing)
+//     // The result array follows the order of operations pushed above
+//     const result = await prisma.$transaction(transactionOperations);
+
+//     // The updated form is the result of the first operation (index 0)
+//     const updatedForm = result[0];
+
+//     // 5. Fetch the final result with fields to return to the user
+//     // (Optional: You can skip this if you don't need to return the full object immediately)
+//     const finalForm = await prisma.form.findUnique({
+//       where: { formId },
+//       include: { formField: { orderBy: { order: "asc" } } },
+//     });
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Form updated successfully",
+//       data: finalForm,
+//     });
+//   } catch (error) {
+//     console.error("Update Error:", error); // 👈 THIS shows you the real problem in terminal
+
+//     // Handle specific Prisma errors if needed
+//     if (error.code === "P2025") {
+//       return res
+//         .status(404)
+//         .json({ success: false, message: "Form ID not found" });
+//     }
+
+//     return res.status(500).json({
+//       success: false,
+//       message: "Failed to update form",
+//       error: error.message, // Return the actual error message
+//     });
+//   }
+// });
+router.put("/api/dashboard/form/:formId", [protect], async (req, res) => {
   try {
+    const { userId } = req.user;
     const { formId } = req.params;
     const { title, description, isPublic, fields } = req.body;
+
     if (!formId) {
-      return res
-        .status(400)
-        .json({ success: false, message: "formId is required" });
+      return res.status(400).json({ success: false, message: "formId is required" });
     }
 
+    // --- Validation Logic (Same as yours) ---
     if (Array.isArray(fields)) {
       for (const field of fields) {
         if (["DROPDOWN", "CHECKBOX", "RADIO"].includes(field.type)) {
-          // ❌ ERROR: If options is undefined OR not an array OR empty
-          if (
-            !field.options ||
-            !Array.isArray(field.options) ||
-            field.options.length === 0
-          ) {
+          if (!field.options || !Array.isArray(field.options) || field.options.length === 0) {
             return res.status(400).json({
               success: false,
               message: `Options are required for field type ${field.type} and must be a non-empty array.`,
@@ -125,22 +254,17 @@ router.put("/api/dashboard/form/:formId", async (req, res) => {
       }
     }
 
+    // --- Authorization Check ---
     const form = await prisma.form.findUnique({ where: { formId } });
-    if (!form) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Form not found" });
-    }
+    if (!form) return res.status(404).json({ success: false, message: "Form not found" });
+    if (form.userId !== userId) return res.status(401).json({ success: false, message: "Not authorized" });
 
-    const slug = title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "");
+    const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 
-    // 1. Prepare the operations array for the transaction
+    // 1. Prepare Transaction
     const transactionOperations = [];
 
-    // 2. Add Form Update Operation
+    // 2. Update Form Metadata
     transactionOperations.push(
       prisma.form.update({
         where: { formId },
@@ -154,23 +278,76 @@ router.put("/api/dashboard/form/:formId", async (req, res) => {
       })
     );
 
-    // 3. Handle Fields Logic (Delete + Create)
+    // 3. SMART FIELD UPDATE LOGIC
     if (Array.isArray(fields)) {
-      // Step A: Delete existing fields
-      transactionOperations.push(
-        prisma.formField.deleteMany({ where: { formId } })
+      // A. Get all currently existing field IDs from DB
+      const existingFields = await prisma.formField.findMany({
+        where: { formId },
+        select: { formFieldId: true },
+      });
+      const existingFieldIds = existingFields.map((f) => f.formFieldId);
+
+      const incomingFieldIds = []; // To track which IDs we are keeping
+      const fieldsToCreate = [];
+      const fieldsToUpdate = [];
+
+      // B. Sort incoming fields into "Update" vs "Create"
+      fields.forEach((field, idx) => {
+        // If field has an ID and that ID exists in DB -> Update it
+        if (field.formFieldId && existingFieldIds.includes(field.formFieldId)) {
+          incomingFieldIds.push(field.formFieldId);
+          fieldsToUpdate.push({ ...field, order: idx });
+        } else {
+          // No ID or ID not found -> Create new
+          fieldsToCreate.push({ ...field, order: idx });
+        }
+      });
+
+      // C. Identify fields to DELETE (Exists in DB but not in incoming request)
+      const fieldsToDelete = existingFieldIds.filter(
+        (id) => !incomingFieldIds.includes(id)
       );
 
-      // Step B: Create new fields
-      if (fields.length > 0) {
-        const newFieldsData = fields.map((field, idx) => ({
-          formFieldId: field.formFieldId, // Optional: If you want to keep the same IDs
+      // --- Add Operations to Transaction ---
+
+      // Operation: Delete removed fields
+      if (fieldsToDelete.length > 0) {
+        transactionOperations.push(
+          prisma.formField.deleteMany({
+            where: {
+              formId,
+              formFieldId: { in: fieldsToDelete },
+            },
+          })
+        );
+      }
+
+      // Operation: Update existing fields (Must be loop of updates)
+      fieldsToUpdate.forEach((field) => {
+        transactionOperations.push(
+          prisma.formField.update({
+            where: { formFieldId: field.formFieldId },
+            data: {
+              label: field.label,
+              required: field.required ?? false,
+              order: field.order,
+              type: field.type,
+              options: Array.isArray(field.options) ? field.options : [],
+              masterFieldId: field.masterFieldId || null,
+            },
+          })
+        );
+      });
+
+      // Operation: Create new fields
+      if (fieldsToCreate.length > 0) {
+        const newFieldsData = fieldsToCreate.map((field) => ({
           label: field.label,
           required: field.required ?? false,
-          order: idx,
+          order: field.order,
           type: field.type,
           options: Array.isArray(field.options) ? field.options : [],
-          formId: formId, // Link to the form
+          formId: formId,
           masterFieldId: field.masterFieldId || null,
         }));
 
@@ -180,15 +357,10 @@ router.put("/api/dashboard/form/:formId", async (req, res) => {
       }
     }
 
-    // 4. EXECUTE TRANSACTION (All or Nothing)
-    // The result array follows the order of operations pushed above
-    const result = await prisma.$transaction(transactionOperations);
+    // 4. Execute Transaction
+    await prisma.$transaction(transactionOperations);
 
-    // The updated form is the result of the first operation (index 0)
-    const updatedForm = result[0];
-
-    // 5. Fetch the final result with fields to return to the user
-    // (Optional: You can skip this if you don't need to return the full object immediately)
+    // 5. Return Result
     const finalForm = await prisma.form.findUnique({
       where: { formId },
       include: { formField: { orderBy: { order: "asc" } } },
@@ -199,31 +371,31 @@ router.put("/api/dashboard/form/:formId", async (req, res) => {
       message: "Form updated successfully",
       data: finalForm,
     });
+
   } catch (error) {
-    console.error("Update Error:", error); // 👈 THIS shows you the real problem in terminal
-
-    // Handle specific Prisma errors if needed
+    console.error("Update Error:", error);
     if (error.code === "P2025") {
-      return res
-        .status(404)
-        .json({ success: false, message: "Form ID not found" });
+      return res.status(404).json({ success: false, message: "Record not found" });
     }
-
     return res.status(500).json({
       success: false,
       message: "Failed to update form",
-      error: error.message, // Return the actual error message
+      error: error.message,
     });
   }
 });
+
+
+
 
 /**
  * GET FORM BY ID
  * GET /api/dashboard/form/details/:formId
  * Returns form details along with its fields
  */
-router.get("/api/dashboard/form/details/:formId", async (req, res) => {
+router.get("/api/dashboard/form/details/:formId", [protect],async (req, res) => {
   try {
+    const { userId } = req.user;
     const { formId } = req.params;
 
     const form = await prisma.form.findUnique({
@@ -231,10 +403,19 @@ router.get("/api/dashboard/form/details/:formId", async (req, res) => {
       include: { formField: true },
     });
 
-    if (!form) {
+
+
+    if (form === null || form === undefined ) {
       return res.status(404).json({
         success: false,
         message: "Form not found",
+      });
+    }
+
+    if (form.userId !== userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Not authorized",
       });
     }
 
@@ -256,7 +437,7 @@ router.get("/api/dashboard/form/details/:formId", async (req, res) => {
  * DELETE FORM
  */
 
-router.delete("/api/dashboard/form/:formId", async (req, res) => {
+router.delete("/api/dashboard/form/:formId", [protect],async (req, res) => {
   try {
     const { formId } = req.params;
     if (!formId) {
@@ -292,8 +473,9 @@ router.delete("/api/dashboard/form/:formId", async (req, res) => {
  * Get the Form submitted responses by formId
  * GET /api/dashboard/form/responses/:formId
  */
-router.get("/api/dashboard/form/responses/:formId", async (req, res) => {
+router.get("/api/dashboard/form/responses/:formId", [protect],async (req, res) => {
   try {
+    const { userId } = req.user;
     const { formId } = req.params;
 
     if (!formId) {
@@ -305,8 +487,12 @@ router.get("/api/dashboard/form/responses/:formId", async (req, res) => {
       include: { formResponse: true },
     });
 
-    if (!form) {
+    if (form === null || form === undefined) {
       return res.status(404).json({ message: "Form not found" });
+    }
+
+    if (form.userId !== userId) {
+      return res.status(401).json({ message: "Not authorized" });
     }
 
     return res.status(200).json({
@@ -327,8 +513,9 @@ router.get("/api/dashboard/form/responses/:formId", async (req, res) => {
  * Get single Form submitted response by responseId
  * GET /api/dashboard/form/response/:responseId
  */
-router.get("/api/dashboard/form/response/:responseId", async (req, res) => {
+router.get("/api/dashboard/form/response/:responseId",[protect], async (req, res) => {
   try {
+    const { userId } = req.user;
     const { responseId } = req.params;
 
     if (!responseId) {
@@ -336,11 +523,38 @@ router.get("/api/dashboard/form/response/:responseId", async (req, res) => {
     }
     const response = await prisma.formResponse.findUnique({
       where: { formResponseId: responseId },
-      include: { responseValue: true },
+      include: { form:{
+        select:{
+          userId: true,
+          title: true
+        }
+      }, responseValue: {
+        include:{
+          formField:{
+            select:{
+              label: true,
+              type: true,
+              options: true,
+              order: true,
+              required: true,
+              masterFieldId: true
+            }
+          }
+        },
+        orderBy:{
+          formField:{
+            order: "asc"
+          }
+        }
+      } },
     });
 
-    if (!response) {
+    if (response === null || response === undefined) {
       return res.status(404).json({ message: "Form response not found" });
+    }
+
+    if (response.form.userId !== userId) {
+      return res.status(401).json({ message: "Not authorized" });
     }
     return res.status(200).json({
       success: true,

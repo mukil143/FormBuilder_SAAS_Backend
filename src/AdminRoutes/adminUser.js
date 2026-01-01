@@ -1,5 +1,6 @@
 import express from "express";
 import { prisma } from "../config/db.js";
+import { admin, protect } from "../Middleware/authMiddleware.js";
 const router = express.Router();
 
 /**
@@ -7,9 +8,15 @@ const router = express.Router();
  * GET /api/admin/users
  * Access Control: Admin
  */
-router.get("/api/admin/users", async (req, res) => {
+router.get("/api/admin/users", [protect,admin],async (req, res) => {
   try {
     const users = await prisma.user.findMany();
+    if (users.length === 0 || users === null || users === undefined) {
+      return res.status(404).json({
+        success: false,
+        message: "No users found",
+      });
+    }
     res.status(200).json(users);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -22,7 +29,7 @@ router.get("/api/admin/users", async (req, res) => {
  * POST /api/admin/users
  * Access Control: Admin
  */
-router.post("/api/admin/users", async (req, res) => {
+router.post("/api/admin/users",[protect,admin], async (req, res) => {
   try {
     const { name, email, password, role} = req.body;
     if (!name || !email || !password) {
@@ -83,7 +90,7 @@ router.post("/api/admin/users", async (req, res) => {
  * PUT /api/admin/users/:id
  * Access Control: Admin
  */
-router.put("/api/admin/users/:id", async (req, res) => {
+router.put("/api/admin/users/:id",[protect,admin], async (req, res) => {
   try {
     const { id } = req.params;
     const { name, email, password, role } = req.body;
@@ -139,7 +146,7 @@ router.put("/api/admin/users/:id", async (req, res) => {
  * DELETE /api/admin/users/:id
  * Access Control: Admin
  */
-router.delete("/api/admin/users/:id", async (req, res) => {
+router.delete("/api/admin/users/:id", [protect,admin],async (req, res) => {
   try {
     const { id } = req.params;
     const user = await prisma.user.delete({
