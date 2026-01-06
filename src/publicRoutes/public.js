@@ -1,5 +1,6 @@
 import express from 'express';
 import { prisma } from '../config/db.js';
+import { formSubmitLimiter } from '../Middleware/rateLimitMiddleware.js';
 const router = express.Router();
 
 
@@ -50,7 +51,7 @@ router.get('/api/public/form/:slug', async (req, res) => {
  * Responses is an array of objects with fieldId and value
  */
 
-router.post('/api/public/form/submit/:slug', async (req, res) => {
+router.post('/api/public/form/submit/:slug', [formSubmitLimiter],async (req, res) => {
   try {
     const { slug } = req.params;
     const { responses } = req.body;

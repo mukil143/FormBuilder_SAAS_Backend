@@ -65,7 +65,7 @@ router.get('/api/dashboard/user-report', [protect],async (req, res) => {
 
 
     if (reports.length === 0) {
-      return res.status(404).json({ success: false, message: 'User reports not found' });
+      return res.status(404).json({ success: false, message: 'User reports is empty' });
     }
 
     if(reports[0].userId !== userId) {

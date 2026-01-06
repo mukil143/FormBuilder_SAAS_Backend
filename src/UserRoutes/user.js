@@ -2,13 +2,14 @@ import express from "express";
 import { prisma } from "../config/db.js";
 import generateToken from "../utils/generateToken.js";
 import { protect } from "../Middleware/authMiddleware.js";
+import { authLimiter } from "../Middleware/rateLimitMiddleware.js";
 const router = express.Router();
 
 /**
  * CREATE - Register User
  * POST /register
  */
-router.post("/api/users/register", async (req, res) => {
+router.post("/api/users/register",[authLimiter], async (req, res) => {
   try {
     const { name, email, password } = req.body;
     if (!name || !email || !password) {
@@ -57,7 +58,7 @@ router.post("/api/users/register", async (req, res) => {
  * POST /login
  */
 
-router.post("/api/users/login", async (req, res) => {
+router.post("/api/users/login", [authLimiter],async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -184,6 +185,35 @@ router.put("/api/users/profile/update", [protect],async (req, res) => {
 router.delete("/api/users/profile/delete", [protect],async (req, res) => {
   try {
     const { userId } = req.user;
+    const { password } = req.body;
+
+    if (!password) {
+      return res.status(400).json({success: false,message: "Password is required" });
+    }
+
+    if(password.length < 6) {
+      return res.status(400).json({success: false,message: "Password must be at least 6 characters" });
+    }
+
+
+    const user = await prisma.user.findUnique({
+      where: {
+        userId: userId,
+      },
+      select: {
+        password: true,
+        userId: true,
+      }
+
+    });
+
+    if(user.userId !== userId){
+      return res.status(401).json({success: false, message: "Not authorized" });
+    }
+
+    if (user.password !== password) {
+      return res.status(401).json({ success: false,message: "Invalid password" });
+    }
 
     await prisma.user.delete({
       where: {

@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "module": "esnext",       // 👈 Changed from 'commonjs' to 'esnext' (for import/export)
+    "moduleResolution": "node",
+    "target": "es2020",
+    "checkJs": false,
+    "skipLibCheck": true      // 👈 This is the key line that fixes your error
+  },
+  "exclude": ["node_modules", "**/node_modules/*"]
+}

@@ -8,7 +8,7 @@ const router = express.Router();
  * GET /api/admin/users
  * Access Control: Admin
  */
-router.get("/api/admin/users", [protect,admin],async (req, res) => {
+router.get("/api/admin/users", [protect, admin], async (req, res) => {
   try {
     const users = await prisma.user.findMany();
     if (users.length === 0 || users === null || users === undefined) {
@@ -23,15 +23,14 @@ router.get("/api/admin/users", [protect,admin],async (req, res) => {
   }
 });
 
-
 /**
  * Create User
  * POST /api/admin/users
  * Access Control: Admin
  */
-router.post("/api/admin/users",[protect,admin], async (req, res) => {
+router.post("/api/admin/users", [protect, admin], async (req, res) => {
   try {
-    const { name, email, password, role} = req.body;
+    const { name, email, password, role } = req.body;
     if (!name || !email || !password) {
       return res.status(400).json({
         success: false,
@@ -84,33 +83,31 @@ router.post("/api/admin/users",[protect,admin], async (req, res) => {
   }
 });
 
-
 /**
  * Update User
  * PUT /api/admin/users/:id
  * Access Control: Admin
  */
-router.put("/api/admin/users/:id",[protect,admin], async (req, res) => {
+router.put("/api/admin/users/:id", [protect, admin], async (req, res) => {
   try {
     const { id } = req.params;
     const { name, email, password, role } = req.body;
-    if  (!name || !email || !password) {
+    if (!name || !email || !password) {
       return res.status(400).json({
         success: false,
         message: "All fields are required",
-      })
+      });
     }
     if (password.length < 6) {
       return res.status(400).json({
         success: false,
         message: "Password must be at least 6 characters",
-      })
+      });
     }
-
 
     const user = await prisma.user.update({
       where: {
-        userId: id
+        userId: id,
       },
       data: {
         name,
@@ -120,33 +117,33 @@ router.put("/api/admin/users/:id",[protect,admin], async (req, res) => {
       },
     });
 
-    if(user === null) {
+    if (user === null) {
       return res.status(404).json({
         success: false,
         message: "User not found",
-      })
+      });
     }
     res.status(200).json({
       success: true,
       message: "User updated successfully",
       user,
-    })
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({
       success: false,
       message: "Internal server error",
       error: error.message,
-    })
+    });
   }
-})
+});
 
 /**
  * Delete User
  * DELETE /api/admin/users/:id
  * Access Control: Admin
  */
-router.delete("/api/admin/users/:id", [protect,admin],async (req, res) => {
+router.delete("/api/admin/users/:id", [protect, admin], async (req, res) => {
   try {
     const { id } = req.params;
     const user = await prisma.user.delete({
@@ -155,26 +152,25 @@ router.delete("/api/admin/users/:id", [protect,admin],async (req, res) => {
       },
     });
 
-    if(user === null) {
+    if (user === null) {
       return res.status(404).json({
         success: false,
         message: "User not found",
-      })
+      });
     }
     res.status(200).json({
       success: true,
       message: "User deleted successfully",
-    })
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({
       success: false,
       message: "Internal server error",
       error: error.message,
-    })
+    });
   }
 });
-
 
 /**
  * GET USER BY ID
@@ -182,7 +178,7 @@ router.delete("/api/admin/users/:id", [protect,admin],async (req, res) => {
  * Access Control: Admin
  */
 
-router.get("/api/admin/users/:id", [protect,admin],async (req, res) => {
+router.get("/api/admin/users/:id", [protect, admin], async (req, res) => {
   try {
     const { id } = req.params;
     const user = await prisma.user.findUnique({
@@ -195,41 +191,121 @@ router.get("/api/admin/users/:id", [protect,admin],async (req, res) => {
         email: true,
         role: true,
         createdAt: true,
-        form :{
-          select:{
+        form: {
+          select: {
             formId: true,
             title: true,
             description: true,
-          }
-        }
+            sharedUrl: true,
+            createdAt: true,
+          },
+        },
       },
     });
 
-    if(!user){
+    if (!user) {
       return res.status(404).json({
         success: false,
         message: "User not found",
-      })
+      });
     }
 
     res.status(200).json({
       success: true,
       message: "User fetched successfully",
       user,
-    })
-
-
-
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({
       success: false,
       message: "Internal server error",
       error: error.message,
-    })
+    });
   }
 });
 
+/**
+ * GET ALL FORMS
+ * GET /api/admin/forms
+ * Access Control: Admin
+ */
+router.get("/api/admin/forms", [protect, admin], async (req, res) => {
+  try {
+    const forms = await prisma.form.findMany({
+      include: {
+        user: {
+          select: {
+            userId: true,
+            name: true,
+            email: true,
+            role: true,
+          },
+        },
+      },
+    });
+    if (forms.length === 0 || forms === null || forms === undefined) {
+      return res.status(404).json({
+        success: false,
+        message: "No forms found",
+      });
+    }
 
+    res.status(200).json({
+      success: true,
+      message: "Forms fetched successfully",
+      data: forms,
+    });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+  }
+});
 
-export default router
+/**
+ * GET Form BY ID
+ * GET /api/admin/form/:formId
+ * Access Control: Admin
+ */
+router.get("/api/admin/form/:formId", [protect, admin], async (req, res) => {
+  try {
+    const { formId } = req.params;
+    const form = await prisma.form.findUnique({
+      where: {
+        formId: formId,
+      },
+      include: {
+        formField: true,
+      },
+    })
+
+    if (form === null || form === undefined) {
+      return res.status(404).json({
+        success: false,
+        message: "Form not found",
+      });
+    }
+    res.status(200).json({
+      success: true,
+      message: "Form fetched successfully",
+      data: form,
+    });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+  }
+});
+
+export default router;
