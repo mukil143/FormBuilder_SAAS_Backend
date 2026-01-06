@@ -308,4 +308,76 @@ router.get("/api/admin/form/:formId", [protect, admin], async (req, res) => {
   }
 });
 
+
+
+/**
+ * Get Form Responses
+ * GET /api/admin/form/responses/:formId
+ * Access Control: Admin
+ */
+router.get("/api/admin/form/responses/:formId", [protect, admin], async (req, res) => {
+  try {
+    const { formId } = req.params;
+    const form = await prisma.form.findUnique({
+      where: {
+        formId: formId,
+      },
+      include: {
+        formResponse: {
+          select:{
+            formResponseId: true,
+            createdAt: true,
+            form:{
+              select:{
+                title: true,
+              }
+            },
+            responseValue:{
+
+              select:{
+                formFieldId: true,
+                value: true,
+                formField:{
+                  select:{
+                    label: true,
+                    type: true,
+                    options: true,
+                    order: true,
+                    required: true
+                  }
+                }
+              }
+            }
+          }
+        },
+      },
+    })
+
+    if (form === null || form === undefined) {
+      return res.status(404).json({
+        success: false,
+        message: "Form not found",
+      });
+    }
+
+
+    res.status(200).json({
+      success: true,
+      message: "Form responses fetched successfully",
+      data: form.formResponse,
+    });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+  }
+});
+
+
+
 export default router;
