@@ -2,6 +2,7 @@ import express from 'express';
 const router = express.Router();
 import { prisma } from '../config/db.js'
 import { protect } from '../Middleware/authMiddleware.js';
+import { trackActivity } from '../Middleware/activityMiddleware.js';
 
 
 /**
@@ -10,7 +11,7 @@ import { protect } from '../Middleware/authMiddleware.js';
  * Body: { userId: String, reportData: Json }
  */
 
-router.post('/api/dashboard/user-report', [protect],async (req, res) => {
+router.post('/api/dashboard/user-report', [protect,trackActivity],async (req, res) => {
   try {
     const { userId } = req.user;
     const { reportData } = req.body;
@@ -50,7 +51,7 @@ router.post('/api/dashboard/user-report', [protect],async (req, res) => {
  * GET User Reports
  * GET /api/dashboard/user-report
  */
-router.get('/api/dashboard/user-report', [protect],async (req, res) => {
+router.get('/api/dashboard/user-report', [protect,trackActivity],async (req, res) => {
   try {
     const { userId } = req.user;
 

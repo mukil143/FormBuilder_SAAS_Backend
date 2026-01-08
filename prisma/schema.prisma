@@ -48,7 +48,7 @@ model User {
   password  String
   role      Role     @default(USER)
   createdAt DateTime @default(now())
-
+  lastActiveAt DateTime @default(now())
   form         Form[]
   masterField  MasterField[]
   formResponse FormResponse[]

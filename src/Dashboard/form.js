@@ -1,11 +1,12 @@
 import express from "express";
 import { prisma } from "../config/db.js";
 import { protect } from "../Middleware/authMiddleware.js";
+import { trackActivity } from "../Middleware/activityMiddleware.js";
 const router = express.Router();
 /**
  * CREATE FORM
  */
-router.post("/api/dashboard/form",[protect] ,async (req, res) => {
+router.post("/api/dashboard/form",[protect,trackActivity] ,async (req, res) => {
   try {
     const { userId } = req.user;
     const { title, description, isPublic, fields } = req.body;
@@ -66,7 +67,7 @@ router.post("/api/dashboard/form",[protect] ,async (req, res) => {
  * GET /api/dashboard/forms
  */
 
-router.get("/api/dashboard/forms",[protect], async (req, res) => {
+router.get("/api/dashboard/forms",[protect,trackActivity], async (req, res) => {
   try {
     const { userId } = req.user;
 
@@ -230,7 +231,7 @@ router.get("/api/dashboard/forms",[protect], async (req, res) => {
 //     });
 //   }
 // });
-router.put("/api/dashboard/form/:formId", [protect], async (req, res) => {
+router.put("/api/dashboard/form/:formId", [protect,trackActivity], async (req, res) => {
   try {
     const { userId } = req.user;
     const { formId } = req.params;
@@ -393,7 +394,7 @@ router.put("/api/dashboard/form/:formId", [protect], async (req, res) => {
  * GET /api/dashboard/form/details/:formId
  * Returns form details along with its fields
  */
-router.get("/api/dashboard/form/details/:formId", [protect],async (req, res) => {
+router.get("/api/dashboard/form/details/:formId", [protect,trackActivity],async (req, res) => {
   try {
     const { userId } = req.user;
     const { formId } = req.params;
@@ -437,7 +438,7 @@ router.get("/api/dashboard/form/details/:formId", [protect],async (req, res) => 
  * DELETE FORM
  */
 
-router.delete("/api/dashboard/form/:formId", [protect],async (req, res) => {
+router.delete("/api/dashboard/form/:formId", [protect,trackActivity],async (req, res) => {
   try {
     const { formId } = req.params;
     if (!formId) {
@@ -473,7 +474,7 @@ router.delete("/api/dashboard/form/:formId", [protect],async (req, res) => {
  * Get the Form submitted responses by formId
  * GET /api/dashboard/form/responses/:formId
  */
-router.get("/api/dashboard/form/responses/:formId", [protect],async (req, res) => {
+router.get("/api/dashboard/form/responses/:formId", [protect,trackActivity],async (req, res) => {
   try {
     const { userId } = req.user;
     const { formId } = req.params;
@@ -513,7 +514,7 @@ router.get("/api/dashboard/form/responses/:formId", [protect],async (req, res) =
  * Get single Form submitted response by responseId
  * GET /api/dashboard/form/response/:responseId
  */
-router.get("/api/dashboard/form/response/:responseId",[protect], async (req, res) => {
+router.get("/api/dashboard/form/response/:responseId",[protect,trackActivity], async (req, res) => {
   try {
     const { userId } = req.user;
     const { responseId } = req.params;

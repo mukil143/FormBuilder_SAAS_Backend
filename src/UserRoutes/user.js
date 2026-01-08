@@ -3,6 +3,7 @@ import { prisma } from "../config/db.js";
 import generateToken from "../utils/generateToken.js";
 import { protect } from "../Middleware/authMiddleware.js";
 import { authLimiter } from "../Middleware/rateLimitMiddleware.js";
+import { trackActivity } from "../Middleware/activityMiddleware.js";
 const router = express.Router();
 
 /**
@@ -106,7 +107,7 @@ router.post("/api/users/login", [authLimiter],async (req, res) => {
  * READ - Get User profile By ID
  * GET /users/:id
  */
-router.get("/api/users/profile",[protect], async (req, res) => {
+router.get("/api/users/profile",[protect,trackActivity], async (req, res) => {
   try {
     const { userId } = req.user;
 
@@ -138,7 +139,7 @@ router.get("/api/users/profile",[protect], async (req, res) => {
  * UPDATE - Update User
  * PUT /users/:id
  */
-router.put("/api/users/profile/update", [protect],async (req, res) => {
+router.put("/api/users/profile/update", [protect,trackActivity],async (req, res) => {
   try {
     const { userId } = req.user;
     const { name, email } = req.body;
@@ -182,7 +183,7 @@ router.put("/api/users/profile/update", [protect],async (req, res) => {
  * DELETE - Delete User
  * DELETE /users/:id
  */
-router.delete("/api/users/profile/delete", [protect],async (req, res) => {
+router.delete("/api/users/profile/delete", [protect,trackActivity],async (req, res) => {
   try {
     const { userId } = req.user;
     const { password } = req.body;

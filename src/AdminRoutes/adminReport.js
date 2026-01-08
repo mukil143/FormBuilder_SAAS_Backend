@@ -2,6 +2,8 @@ import express from 'express';
 const router = express.Router();
 import { prisma } from '../config/db.js'
 import { admin, protect } from '../Middleware/authMiddleware.js';
+import { trackActivity } from '../Middleware/activityMiddleware.js';
+
 
 
 /**
@@ -9,7 +11,7 @@ import { admin, protect } from '../Middleware/authMiddleware.js';
  * GET /api/dashboard/admin/user-reports
  * Query Params: userId (Admin's userId)
  */
-router.get('/api/dashboard/admin/user-reports', [protect,admin],async (req, res) => {
+router.get('/api/dashboard/admin/user-reports', [protect,trackActivity,admin],async (req, res) => {
   try {
     const { userId } = req.user;
 
@@ -41,7 +43,7 @@ router.get('/api/dashboard/admin/user-reports', [protect,admin],async (req, res)
  * Body: { status: ReportStatus }
  * Params: reportId
  */
-router.patch('/api/dashboard/admin/user-report/:reportId/status',[protect,admin], async (req, res) => {
+router.patch('/api/dashboard/admin/user-report/:reportId/status',[protect,trackActivity,admin], async (req, res) => {
   try {
     const { reportId } = req.params;
     const { status } = req.body;

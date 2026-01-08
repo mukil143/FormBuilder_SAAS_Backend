@@ -2,12 +2,13 @@ import express from 'express';
 const router = express.Router();
 import { prisma } from '../config/db.js'
 import { admin, protect } from '../Middleware/authMiddleware.js';
+import { trackActivity } from '../Middleware/activityMiddleware.js';
 
 
 // ============================
 // CREATE Master Field
 // ============================
-router.post('/api/dashboard/master-fields', [protect],async (req, res) => {
+router.post('/api/dashboard/master-fields', [protect,trackActivity],async (req, res) => {
   try {
     const { userId } = req.user;
     const { label, type , options} = req.body;
@@ -63,7 +64,7 @@ router.post('/api/dashboard/master-fields', [protect],async (req, res) => {
 // ============================
 // READ all Master Fields by User
 // ============================
-router.get('/api/dashboard/master-fields',[protect], async (req, res) => {
+router.get('/api/dashboard/master-fields',[protect,trackActivity], async (req, res) => {
   try {
     const { userId } = req.user;
     if (!userId) {
@@ -92,7 +93,7 @@ router.get('/api/dashboard/master-fields',[protect], async (req, res) => {
 // ============================
 // READ single Master Field by ID
 // ============================
-router.get('/api/dashboard/master-fields/:masterFieldId', [protect],async (req, res) => {
+router.get('/api/dashboard/master-fields/:masterFieldId', [protect,trackActivity],async (req, res) => {
   try {
     const { userId } = req.user;
     const { masterFieldId } = req.params;
@@ -124,7 +125,7 @@ router.get('/api/dashboard/master-fields/:masterFieldId', [protect],async (req, 
 // ============================
 // UPDATE Master Field
 // ============================
-router.put('/api/dashboard/master-fields/:masterFieldId', [protect],async (req, res) => {
+router.put('/api/dashboard/master-fields/:masterFieldId', [protect,trackActivity],async (req, res) => {
   try {
     const { userId } = req.user;
     const { masterFieldId } = req.params;
@@ -191,7 +192,7 @@ router.put('/api/dashboard/master-fields/:masterFieldId', [protect],async (req, 
 // ============================
 // DELETE Master Field
 // ============================
-router.delete('/api/dashboard/master-fields/:masterFieldId', [protect],async (req, res) => {
+router.delete('/api/dashboard/master-fields/:masterFieldId', [protect,trackActivity],async (req, res) => {
   try {
     const { userId } = req.user;
     const { masterFieldId } = req.params;
