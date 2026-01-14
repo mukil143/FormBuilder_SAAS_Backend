@@ -73,9 +73,12 @@ model Form {
   slug        String   @unique
   isPublic    Boolean  @default(false)
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt @default(now())
   userId String
   user   User   @relation(fields: [userId], references: [userId],onDelete: Cascade)
   sharedUrl String?
+  //-- Customization fields
+  theme       Json? @default("{}") // e.g., colors, fonts
   formField    FormField[]
   formResponse FormResponse[]
 }

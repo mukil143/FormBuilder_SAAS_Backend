@@ -80,6 +80,8 @@ router.post("/api/users/login", [authLimiter],async (req, res) => {
       return res.status(401).json({ message: "Invalid password" });
     }
 
+    user.password = undefined; // Remove password from user object
+
     const token = await generateToken(user);
     return res.status(200).json({ message: "Login successful", user, token });
   } catch (error) {

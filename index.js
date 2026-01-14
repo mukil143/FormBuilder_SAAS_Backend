@@ -12,6 +12,7 @@ import masterFields from './src/Dashboard/masterFields.js';
 import userReport from './src/Dashboard/userReport.js';
 import users from './src/UserRoutes/user.js';
 import publicRoutes from './src/publicRoutes/public.js';
+import { stat } from 'fs';
 
 // Initialize App
 const app = express();
@@ -23,9 +24,12 @@ app.use(express.json());      // Parse JSON body
 app.use(globalLimiter);       // Rate Limiting
 
 // Test Route
-app.get('/api/test', (req, res) => {
+app.get('/', (req, res) => {
     res.json({
-        message: "API is working fine!"
+        message: "API is running successfully",
+        status: "success",
+        code: 200
+
     });
 });
 
