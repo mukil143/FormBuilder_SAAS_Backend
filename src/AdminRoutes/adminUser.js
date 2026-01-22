@@ -3,6 +3,7 @@ import { prisma } from "../config/db.js";
 import { admin, protect } from "../Middleware/authMiddleware.js";
 const router = express.Router();
 import { trackActivity } from "../Middleware/activityMiddleware.js";
+import { data } from "react-router";
 /**
  * GET ALL USERS
  * GET /api/admin/users
@@ -444,6 +445,77 @@ router.get(
 );
 
 /**
+ * Create Admin User
+ * POST /api/admin/admins
+ * Access Control: Admin
+ */
+router.post(
+  "/api/admin/admins",
+  [protect, trackActivity, admin],
+  async (req, res) => {
+    try {
+      const { name, email, password, role } = req.body;
+
+      if (
+        !name ||
+        !email ||
+        !password ||
+        !role
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "All fields are required",
+        });
+      }
+      if (role.toUpperCase() !== "ADMIN"){
+        return res.status(400).json({
+          success: false,
+          message: "Role must be ADMIN",
+        });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({
+          success: false,
+          message: "Password must be at least 6 characters",
+        });
+      }
+      const existingUser = await prisma.user.findUnique({
+        where: {
+          email,
+        },
+      });
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: "User already exists",
+        });
+      }
+      const user = await prisma.user.create({
+        data: {
+          name,
+          email,
+          password,
+          role: "ADMIN",
+        },
+      });
+      res.status(201).json({
+        success: true,
+        message: "Admin created successfully",
+        data: user,
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  },
+);
+
+/**
  * Get all Admins
  * GET /api/admin/admins
  * Access Control: Admin
@@ -531,7 +603,7 @@ router.delete(
   [protect, trackActivity, admin],
   async (req, res) => {
     const { userId } = req.params;
-    const {password} = req.body;
+    const { password } = req.body;
     const adminUserId = req.user.userId;
     try {
       const admin = await prisma.user.findUnique({
@@ -563,7 +635,6 @@ router.delete(
         message: "Admin deleted successfully",
         data: deletedAdmin,
       });
-
     } catch (error) {
       console.error(error);
       return res.status(500).json({
