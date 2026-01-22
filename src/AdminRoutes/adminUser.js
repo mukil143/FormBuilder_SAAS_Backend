@@ -14,6 +14,9 @@ router.get(
   async (req, res) => {
     try {
       const users = await prisma.user.findMany({
+        where: {
+          role: "USER",
+        },
         select: {
           userId: true,
           name: true,
@@ -24,6 +27,13 @@ router.get(
         },
         orderBy: { createdAt: "desc" },
       });
+
+      if (users.length === 0 || users === null || users === undefined) {
+        return res.status(404).json({
+          success: false,
+          message: "No users found",
+        });
+      }
 
       // Define the threshold (e.g., 5 minutes)
       const FIVE_MINUTES = 5 * 60 * 1000;
@@ -52,7 +62,7 @@ router.get(
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
-  }
+  },
 );
 
 /**
@@ -116,7 +126,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 /**
@@ -175,7 +185,7 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 /**
@@ -213,7 +223,7 @@ router.delete(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 /**
@@ -270,7 +280,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 /**
@@ -284,6 +294,11 @@ router.get(
   async (req, res) => {
     try {
       const forms = await prisma.form.findMany({
+        where: {
+          user: {
+            role: "USER",
+          },
+        },
         include: {
           user: {
             select: {
@@ -315,7 +330,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 /**
@@ -357,7 +372,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 /**
@@ -425,7 +440,139 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
+);
+
+/**
+ * Get all Admins
+ * GET /api/admin/admins
+ * Access Control: Admin
+ */
+router.get(
+  "/api/admin/admins",
+  [protect, trackActivity, admin],
+  async (req, res) => {
+    try {
+      const admins = await prisma.user.findMany({
+        where: {
+          role: "ADMIN",
+        },
+        select: {
+          userId: true,
+          name: true,
+          email: true,
+          role: true,
+          createdAt: true,
+        },
+      });
+      if (admins.length === 0 || admins === null || admins === undefined) {
+        return res.status(404).json({
+          success: false,
+          message: "No admins found",
+        });
+      }
+      return res.status(200).json({
+        success: true,
+        message: "Admins fetched successfully",
+        data: admins,
+      });
+    } catch (error) {}
+  },
+);
+
+/**
+ * Update Admin roles
+ * PATCH /api/admin/admins/:userId
+ * Access Control: Admin
+ */
+router.patch(
+  "/api/admin/admins/:userId",
+  [protect, trackActivity, admin],
+  async (req, res) => {
+    const { userId } = req.params;
+    const { role } = req.body;
+    try {
+      if (role.toUpperCase() === "USER") {
+        // Downgrade to USER
+        const updatedUser = await prisma.user.update({
+          where: { userId: userId },
+          data: { role: "USER" },
+        });
+        if (!updatedUser) {
+          return res.status(404).json({
+            success: false,
+            message: "Admin not found",
+          });
+        }
+        return res.status(200).json({
+          success: true,
+          message: "Admin role updated successfully",
+          data: updatedUser,
+        });
+      }
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  },
+);
+
+/**
+ * Delete Admin
+ * DELETE /api/admin/admins/:userId
+ * Access Control: Admin
+ */
+router.delete(
+  "/api/admin/admins/:userId",
+  [protect, trackActivity, admin],
+  async (req, res) => {
+    const { userId } = req.params;
+    const {password} = req.body;
+    const adminUserId = req.user.userId;
+    try {
+      const admin = await prisma.user.findUnique({
+        where: { userId: adminUserId },
+      });
+      if (!admin) {
+        return res.status(404).json({
+          success: false,
+          message: "Admin not found",
+        });
+      }
+      if (admin.password !== password) {
+        return res.status(401).json({
+          success: false,
+          message: "Password is incorrect",
+        });
+      }
+      const deletedAdmin = await prisma.user.delete({
+        where: { userId: userId },
+      });
+      if (!deletedAdmin) {
+        return res.status(404).json({
+          success: false,
+          message: "Admin not found",
+        });
+      }
+      return res.status(200).json({
+        success: true,
+        message: "Admin deleted successfully",
+        data: deletedAdmin,
+      });
+
+    } catch (error) {
+      console.error(error);
+      return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  },
 );
 
 export default router;

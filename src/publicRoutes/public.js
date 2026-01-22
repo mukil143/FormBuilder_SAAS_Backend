@@ -106,7 +106,7 @@ router.post('/api/public/form/submit/:slug', [formSubmitLimiter],async (req, res
 });
 
 // /**
-//  * Modify the answes of a form response
+//  * Modify the value of a form response
 //  * PUT /api/dashboard/public/modify/:formResponseId
 //  * Body: { responses: [...] }
 //  * Responses is an array of objects with fieldId and value
