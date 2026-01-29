@@ -2,6 +2,8 @@ import express from "express";
 import { prisma } from "../config/db.js";
 import { protect } from "../Middleware/authMiddleware.js";
 import { trackActivity } from "../Middleware/activityMiddleware.js";
+import generateToken from "../utils/generateToken.js";
+import { generateApiKeys } from "../utils/generateKeys.js";
 const router = express.Router();
 /**
  * CREATE FORM
@@ -14,13 +16,12 @@ router.post(
       const { userId, role } = req.user;
       const { title, description, isPublic, fields, theme } = req.body;
 
-      if(role === 'ADMIN'){
+      if (role === "ADMIN") {
         return res.status(403).json({
           success: false,
           message: "Admins are not allowed to create forms",
         });
       }
-
 
       if (!title || !userId) {
         return res.status(400).json({
@@ -78,7 +79,7 @@ router.post(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 /**
@@ -117,7 +118,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 /**
@@ -315,7 +316,7 @@ router.put(
             slug,
             sharedUrl: `${process.env.FRONTEND_URL}public/form/${slug}`,
           },
-        })
+        }),
       );
 
       // 3. SMART FIELD UPDATE LOGIC
@@ -348,7 +349,7 @@ router.put(
 
         // C. Identify fields to DELETE (Exists in DB but not in incoming request)
         const fieldsToDelete = existingFieldIds.filter(
-          (id) => !incomingFieldIds.includes(id)
+          (id) => !incomingFieldIds.includes(id),
         );
 
         // --- Add Operations to Transaction ---
@@ -361,7 +362,7 @@ router.put(
                 formId,
                 formFieldId: { in: fieldsToDelete },
               },
-            })
+            }),
           );
         }
 
@@ -378,7 +379,7 @@ router.put(
                 options: Array.isArray(field.options) ? field.options : [],
                 masterFieldId: field.masterFieldId || null,
               },
-            })
+            }),
           );
         });
 
@@ -395,7 +396,7 @@ router.put(
           }));
 
           transactionOperations.push(
-            prisma.formField.createMany({ data: newFieldsData })
+            prisma.formField.createMany({ data: newFieldsData }),
           );
         }
       }
@@ -427,7 +428,7 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 /**
@@ -474,7 +475,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 /**
@@ -514,7 +515,7 @@ router.delete(
         message: "Internal server error",
       });
     }
-  }
+  },
 );
 
 /**
@@ -558,7 +559,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 /**
@@ -626,7 +627,7 @@ router.get(
         error: error.message,
       });
     }
-  }
+  },
 );
 
 /**
@@ -696,7 +697,7 @@ router.put(
 
       const form = await prisma.form.findUnique({
         where: { formId },
-      })
+      });
       if (form === null || form === undefined) {
         return res
           .status(404)
@@ -732,7 +733,131 @@ router.put(
         error: error.message,
       });
     }
-  }
+  },
 );
+/**
+ * Generate API Keys for the logged-in user
+ * POST /api/dashboard/keys
+ * Body: { name: "My Key" } (optional)
+ */
+router.post("/api/dashboard/keys", [protect], async (req, res) => {
+  try {
+    const { userId } = req.user;
+    const { name } = req.body; // e.g., "My E-commerce Site"
+
+    const existingKeys = await prisma.apiKey.findMany({
+      where: { userId },
+    });
+
+    if (existingKeys.length >= 5) {
+      return res.status(400).json({
+        success: false,
+        message: "API Key limit reached. Maximum 5 keys allowed per user.",
+      });
+    }
+
+    const keyName = name || "Default Key";
+    const nameExists = existingKeys.some((k) => k.name === keyName);
+    if (nameExists) {
+      return res.status(400).json({
+        success: false,
+        message: `You already have a key named "${keyName}". Please choose a different name.`,
+      });
+    }
+
+    // 1. Generate keys
+    const { rawKey, rawSecret, hashedSecret } = await generateApiKeys();
+
+    // 2. Save public key + hashed secret to DB
+    await prisma.apiKey.create({
+      data: {
+        userId,
+        key: rawKey,
+        secret: hashedSecret,
+        name: keyName || "Default Key",
+      },
+    });
+
+    // 3. Return RAW keys to user (Critical: This is the only time they see the secret)
+    res.status(201).json({
+      success: true,
+      message: "API Key generated successfully Store the secret key securely! You won't be able to see it again.",
+      data: {
+        publicKey: rawKey,
+        secretKey: rawSecret, // ⚠️ Warn user to copy this now!
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to generate keys" });
+  }
+});
+
+/**
+ * Get API Keys for the logged-in user
+ * GET /api/dashboard/keys
+ */
+router.get("/api/dashboard/keys", [protect], async (req, res) => {
+  try {
+    const { userId } = req.user;
+
+    const keys = await prisma.apiKey.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true, // Needed for the Delete button
+        name: true, // e.g. "Production App"
+        key: true, // The Public Key (pk_live_...)
+        lastUsed: true, // "Last seen 2 mins ago"
+        createdAt: true,
+      },
+    });
+
+    res.status(200).json({
+      success: true,
+      data: keys || [],
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: "Failed to fetch keys" });
+  }
+});
+
+/**
+ * Delete API Key
+ * DELETE /api/dashboard/keys/:id
+ */
+router.delete("/api/dashboard/keys/:id", [protect], async (req, res) => {
+  try {
+    const { userId } = req.user;
+    const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({ success: false, message: "id is required" });
+    }
+
+    const key = await prisma.apiKey.findUnique({ where: { id: id } });
+    if (!key) {
+      return res.status(404).json({ success: false, message: "Key not found" });
+    }
+
+    if (key.userId !== userId) {
+      return res
+        .status(403)
+        .json({
+          success: false,
+          message: "You don't have permission to delete this key",
+        });
+    }
+    await prisma.apiKey.delete({ where: { id: id } });
+    res
+      .status(200)
+      .json({ success: true, message: "Key deleted successfully" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: "Failed to delete key" });
+  }
+});
 
 export default router;

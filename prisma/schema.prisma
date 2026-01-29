@@ -53,6 +53,7 @@ model User {
   masterField  MasterField[]
   formResponse FormResponse[]
   userReport   UserReport[]
+  apiKey       ApiKey[]
 }
 
 model MasterField {
@@ -131,4 +132,17 @@ model UserReport{
   updatedAt DateTime @updatedAt
   status ReportStatus @default(RISED)
   user          User      @relation(fields: [userId], references: [userId],onDelete: Cascade)
+}
+
+
+model ApiKey {
+  id        String   @id @default(uuid())
+  key       String   @unique // The Public Key (e.g., pk_live_12345)
+  secret    String   // The Hashed Secret Key (e.g., $2b$10$...)
+  name      String?  // Label (e.g., "Production Website")
+  lastUsed  DateTime?
+  createdAt DateTime @default(now())
+
+  userId    String
+  user     User     @relation(fields: [userId], references: [userId],onDelete: Cascade)
 }

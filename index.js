@@ -12,8 +12,7 @@ import masterFields from './src/Dashboard/masterFields.js';
 import userReport from './src/Dashboard/userReport.js';
 import users from './src/UserRoutes/user.js';
 import publicRoutes from './src/publicRoutes/public.js';
-import { stat } from 'fs';
-
+import  externalApiRoutes from './src/v1/externalApiRoutes.js';
 // Initialize App
 const app = express();
 const PORT = 7001;
@@ -41,6 +40,9 @@ app.use('/', publicRoutes);
 app.use('/', userReport);
 app.use('/', AdminReport);
 app.use('/', AdminUser);
+
+//External API Routes
+app.use('/api/v1', externalApiRoutes);
 
 // Server Start
 app.listen(PORT, () => {
