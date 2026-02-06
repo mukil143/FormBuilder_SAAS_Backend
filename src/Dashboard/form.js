@@ -527,38 +527,90 @@ router.get(
   [protect, trackActivity],
   async (req, res) => {
     try {
-      const { userId } = req.user;
-      const { formId } = req.params;
+    const { formId } = req.params;
+    const userId = req.user.userId;
 
-      if (!formId) {
-        return res.status(400).json({ message: "formId is required" });
-      }
-
-      const form = await prisma.form.findUnique({
-        where: { formId: formId },
-        include: { formResponse: true },
-      });
-
-      if (form === null || form === undefined) {
-        return res.status(404).json({ message: "Form not found" });
-      }
-
-      if (form.userId !== userId) {
-        return res.status(401).json({ message: "Not authorized" });
-      }
-
-      return res.status(200).json({
-        success: true,
-        data: form.formResponse,
-      });
-    } catch (error) {
-      console.error(error);
-      return res.status(500).json({
-        success: false,
-        message: "Internal server error",
-        error: error.message,
-      });
+    // 1. Verify Ownership first
+    const form = await prisma.form.findUnique({ where: { formId } });
+    if (!form || form.userId !== userId) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Form not found" });
     }
+
+
+    // STEP 1: Fetch Form Structure (Your Table Headers)
+    // We strictly order fields so columns align correctly
+    const formStructure = await prisma.form.findUnique({
+      where: { formId },
+      select: {
+        title: true,
+        formField: {
+          orderBy: { order: "asc" }, // Critical for column order
+          select: {
+            formFieldId: true,
+            label: true,
+            type: true,
+          },
+        },
+      },
+    });
+
+    if (!formStructure) return res.status(404).json({ message: "Form not found" });
+
+    // STEP 2: Fetch Responses (Your Table Rows)
+    // We ONLY fetch the values, not the question labels again
+    const rawResponses = await prisma.formResponse.findMany({
+      where: { formId },
+      orderBy: { createdAt: "desc" },
+      select: {
+        formResponseId: true,
+        createdAt: true,
+        responseValue: {
+          select: {
+            formFieldId: true,
+            value: true,
+          },
+        },
+      },
+    });
+
+    // STEP 3: Transform Data for Frontend Table
+    // Convert the "Array of Objects" into a "Single Flat Object" per row
+    const tableRows = rawResponses.map((response) => {
+      const rowObject = {
+        id: response.formResponseId,
+        submittedAt: response.createdAt,
+      };
+
+      // Map answers to their field IDs (or Labels)
+      response.responseValue.forEach((answer) => {
+        rowObject[answer.formFieldId] = answer.value;
+      });
+
+      return rowObject;
+    });
+
+    // STEP 4: Send Clean JSON
+    res.json({
+      success: true,
+      data: {
+        formTitle: formStructure.title,
+        // Columns: Use this to generate <th>
+        columns: formStructure.formField.map((field) => ({
+          key: field.formFieldId, // This matches the key in rowObject
+          label: field.label,
+          type: field.type,
+        })),
+        // Rows: Use this to generate <tr>
+        rows: tableRows,
+      },
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: error.message });
+  }
   },
 );
 
@@ -566,69 +618,69 @@ router.get(
  * Get single Form submitted response by responseId
  * GET /api/dashboard/form/response/:responseId
  */
-router.get(
-  "/api/dashboard/form/response/:responseId",
-  [protect, trackActivity],
-  async (req, res) => {
-    try {
-      const { userId } = req.user;
-      const { responseId } = req.params;
+// router.get(
+//   "/api/dashboard/form/response/:responseId",
+//   [protect, trackActivity],
+//   async (req, res) => {
+//     try {
+//       const { userId } = req.user;
+//       const { responseId } = req.params;
 
-      if (!responseId) {
-        return res.status(400).json({ message: "responseId is required" });
-      }
-      const response = await prisma.formResponse.findUnique({
-        where: { formResponseId: responseId },
-        include: {
-          form: {
-            select: {
-              userId: true,
-              title: true,
-            },
-          },
-          responseValue: {
-            include: {
-              formField: {
-                select: {
-                  label: true,
-                  type: true,
-                  options: true,
-                  order: true,
-                  required: true,
-                  masterFieldId: true,
-                },
-              },
-            },
-            orderBy: {
-              formField: {
-                order: "asc",
-              },
-            },
-          },
-        },
-      });
+//       if (!responseId) {
+//         return res.status(400).json({ message: "responseId is required" });
+//       }
+//       const response = await prisma.formResponse.findUnique({
+//         where: { formResponseId: responseId },
+//         include: {
+//           form: {
+//             select: {
+//               userId: true,
+//               title: true,
+//             },
+//           },
+//           responseValue: {
+//             include: {
+//               formField: {
+//                 select: {
+//                   label: true,
+//                   type: true,
+//                   options: true,
+//                   order: true,
+//                   required: true,
+//                   masterFieldId: true,
+//                 },
+//               },
+//             },
+//             orderBy: {
+//               formField: {
+//                 order: "asc",
+//               },
+//             },
+//           },
+//         },
+//       });
 
-      if (response === null || response === undefined) {
-        return res.status(404).json({ message: "Form response not found" });
-      }
+//       if (response === null || response === undefined) {
+//         return res.status(404).json({ message: "Form response not found" });
+//       }
 
-      if (response.form.userId !== userId) {
-        return res.status(401).json({ message: "Not authorized" });
-      }
-      return res.status(200).json({
-        success: true,
-        data: response,
-      });
-    } catch (error) {
-      console.error(error);
-      return res.status(500).json({
-        success: false,
-        message: "Internal server error",
-        error: error.message,
-      });
-    }
-  },
-);
+//       if (response.form.userId !== userId) {
+//         return res.status(401).json({ message: "Not authorized" });
+//       }
+//       return res.status(200).json({
+//         success: true,
+//         data: response,
+//       });
+//     } catch (error) {
+//       console.error(error);
+//       return res.status(500).json({
+//         success: false,
+//         message: "Internal server error",
+//         error: error.message,
+//       });
+//     }
+//   },
+// );
 
 /**
  * Get Form Statistics by formId
