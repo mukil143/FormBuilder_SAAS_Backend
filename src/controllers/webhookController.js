@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
 import { prisma } from "../config/db.js"; // Check if this path is correct for you
-import { PLAN_IDS } from "../config/razorpay.js";
+import { PLAN_IDS, razorpay } from "../config/razorpay.js";
+
+
 
 const getPlanTypeFromId = (razorpayPlanId) => {
   const planKey = Object.keys(PLAN_IDS).find(
@@ -51,30 +53,31 @@ export const handleRazorpayWebhook = async (req, res) => {
           },
         });
 
-        //if they have an old active subscription, cancel it to prevent double billing
-        for (const oldSub of oldActiveSubs) {
-          try {
-            // Tell Razorpay to stop charging the old plan
-            await razorpay.subscriptions.cancel(
-              oldSub.razorpaySubscriptionId,
-              false,
-            );
 
-            // Mark as cancelled in our DB
-            await prisma.subscription.update({
-              where: { razorpaySubscriptionId: oldSub.razorpaySubscriptionId },
-              data: { status: "cancelled" },
-            });
-            console.log(
-              `♻️ Upgraded! Cancelled old plan: ${oldSub.razorpaySubscriptionId}`,
-            );
-          } catch (error) {
-            console.error(
-              "Failed to cancel old sub during upgrade:",
-              error,
-            );
+          //if they have an old active subscription, cancel it to prevent double billing
+          for (const oldSub of oldActiveSubs) {
+            try {
+              // Tell Razorpay to stop charging the old plan
+              await razorpay.subscriptions.cancel(
+                oldSub.razorpaySubscriptionId,
+                false,
+              );
+
+              // Mark as cancelled in our DB
+              await prisma.subscription.update({
+                where: { razorpaySubscriptionId: oldSub.razorpaySubscriptionId },
+                data: { status: "cancelled" },
+              });
+              console.log(
+                `♻️ Upgraded! Cancelled old plan: ${oldSub.razorpaySubscriptionId}`,
+              );
+            } catch (error) {
+              console.error(
+                "Failed to cancel old sub during upgrade:",
+                error,
+              );
+            }
           }
-        }
 
         await prisma.subscription.upsert({
           where: { razorpaySubscriptionId: id },
@@ -85,10 +88,10 @@ export const handleRazorpayWebhook = async (req, res) => {
           create: {
             userId,
             razorpaySubscriptionId: id,
-            razorpayPlanId: plan_id,
             plan: planType,
             status: "active",
             currentPeriodEnd: new Date(current_end * 1000),
+            isActive: true,
           },
         });
 

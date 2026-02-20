@@ -1,7 +1,6 @@
 import { prisma } from "../config/db.js";
 import { razorpay, PLAN_IDS } from "../config/razorpay.js";
 
-
 export const createSubscription = async (req, res) => {
   try {
     console.log("Create Subscription Request Body:", req.body);
@@ -17,12 +16,12 @@ export const createSubscription = async (req, res) => {
 
     console.log(`Creating ${planType} subscription for user ${userId}`);
 
-
-
     const user = await prisma.user.findUnique({ where: { userId } });
 
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
 
     // 2. Get or Create Razorpay Customer ID
@@ -38,19 +37,11 @@ export const createSubscription = async (req, res) => {
       customerId = customer.id;
     }
 
-    
-
-
-
-
-      // Save it to our DB for next time
-       await prisma.user.update({
-        where: { userId },
-        data: { razorpayCustomerId: customerId },
-      });
-
-
-
+    // Save it to our DB for next time
+    await prisma.user.update({
+      where: { userId },
+      data: { razorpayCustomerId: customerId },
+    });
 
     // 3. Create the Subscription on Razorpay
     // This tells Razorpay: "Start a monthly charge for this customer on this plan"
@@ -81,8 +72,3 @@ export const createSubscription = async (req, res) => {
     });
   }
 };
-
-
-
-
-
