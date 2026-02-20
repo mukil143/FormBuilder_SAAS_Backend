@@ -1,6 +1,5 @@
-import jwt from 'jsonwebtoken'
+import jwt from "jsonwebtoken";
 import { prisma } from "../config/db.js";
-
 
 /**
  * MIDDILEWARE to protect routes - Verify JWT token
@@ -8,13 +7,11 @@ import { prisma } from "../config/db.js";
 
 export const protect = async (req, res, next) => {
   let token;
-  if (
-    req.headers?.authorization?.startsWith("Bearer")
-  ) {
+  if (req.headers?.authorization?.startsWith("Bearer")) {
     try {
-       token = req.headers.authorization.split(" ")[1];
+      token = req.headers.authorization.split(" ")[1];
 
-       const decoded = await jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = await jwt.verify(token, process.env.JWT_SECRET);
 
       console.log(decoded);
 
@@ -34,30 +31,30 @@ export const protect = async (req, res, next) => {
             take: 1,
             orderBy: { createdAt: "desc" },
           },
-        }
-      })
+        },
+      });
 
-      if (req.user === null || req.user === undefined || req.user === "" ) {
+      if (req.user === null || req.user === undefined || req.user === "") {
         return res.status(401).json({ message: "Not authorized" });
       }
       next();
     } catch (error) {
       console.log(error);
-      return res.status(401).json({ success: false, message: "Not authorized Token failed" });
+      return res
+        .status(401)
+        .json({ success: false, message: "Not authorized Token failed" });
     }
+  } else {
+    return res
+      .status(401)
+      .json({ success: false, message: "authorized token not found" });
   }
-  else {
-  return res.status(401).json({ success: false, message: "authorized token not found" });
-}
-}
-
-
+};
 
 export const admin = async (req, res, next) => {
-  if(req.user.role === "ADMIN") {
+  if (req.user.role === "ADMIN") {
     next();
   } else {
-    return res.status(401).json({success: false, message: "Not authorized" });
+    return res.status(401).json({ success: false, message: "Not authorized" });
   }
-}
-
+};

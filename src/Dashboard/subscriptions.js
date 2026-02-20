@@ -1,5 +1,5 @@
 import express from "express";
-import { protect } from "../middleware/authMiddleware.js";
+import { protect } from "../Middleware/authMiddleware.js"; // You made this earlier
 import { createSubscription } from "../controllers/paymentController.js"; // You made this earlier
 import { getSubscription, cancelSubscription } from "../controllers/subscriptionController.js";
 
