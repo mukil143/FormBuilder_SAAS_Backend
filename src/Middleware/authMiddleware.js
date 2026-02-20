@@ -9,8 +9,7 @@ import { prisma } from "../config/db.js";
 export const protect = async (req, res, next) => {
   let token;
   if (
-    req.headers.authorization &&
-    req.headers.authorization.startsWith("Bearer")
+    req.headers?.authorization?.startsWith("Bearer")
   ) {
     try {
        token = req.headers.authorization.split(" ")[1];
@@ -29,6 +28,12 @@ export const protect = async (req, res, next) => {
           email: true,
           role: true,
           createdAt: true,
+          plan: true,
+          subscriptions: {
+            where: { status: "active" },
+            take: 1,
+            orderBy: { createdAt: "desc" },
+          },
         }
       })
 

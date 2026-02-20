@@ -14,6 +14,22 @@ datasource db {
 
 }
 
+enum PlanType {
+  FREE
+  PRO
+  BUSINESS
+}
+
+enum RazorpayStatus {
+  created
+  authenticated
+  active
+  pending
+  halted
+  cancelled
+  completed
+  expired
+}
 
 enum Role {
   ADMIN
@@ -49,11 +65,22 @@ model User {
   role      Role     @default(USER)
   createdAt DateTime @default(now())
   lastActiveAt DateTime @default(now())
+  plan         PlanType @default(FREE)
+
+  // Usage metrics
+  formCount Int @default(0)
+  // e.g., number of form responses submitted in the current month
+  monthlyResponseCount Int @default(0)
+  razorpayCustomerId   String?  @unique
+  //-- Relations
   form         Form[]
   masterField  MasterField[]
   formResponse FormResponse[]
   userReport   UserReport[]
   apiKey       ApiKey[]
+
+  //Subscription relation
+  subscriptions  Subscription[]
 }
 
 model MasterField {
@@ -142,7 +169,24 @@ model ApiKey {
   name      String?  // Label (e.g., "Production Website")
   lastUsed  DateTime?
   createdAt DateTime @default(now())
-
   userId    String
   user     User     @relation(fields: [userId], references: [userId],onDelete: Cascade)
 }
+
+
+model Subscription {
+  subscriptionId String   @id @default(uuid())
+  userId         String
+  plan           PlanType @default(FREE)
+  status         RazorpayStatus
+  // For simplicity, we can store the start and end dates of the subscription in the database.
+  startDate      DateTime @default(now())
+  currentPeriodEnd     DateTime
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  isActive       Boolean  @default(true)
+  razorpaySubscriptionId String       @unique
+  user           User     @relation(fields: [userId], references: [userId],onDelete: Cascade)
+}
+
+

@@ -1,11 +1,13 @@
 import express from "express";
 import { prisma } from "../config/db.js"; // Adjust path
+import { checkAPIAccess } from "../Middleware/accessGuard.js";
 import { apiKeyAuth } from "../Middleware/apiAuthkey.js";
 
 const router = express.Router();
 
 // 🔒 Apply API Key Auth to ALL routes in this file
 router.use(apiKeyAuth);
+router.use(checkAPIAccess);
 
 // ---------------------------------------------------------
 // 1. FETCH FORM (Get structure/questions)
@@ -101,7 +103,6 @@ router.get("/forms/:formId/responses", async (req, res) => {
         .json({ success: false, message: "Form not found" });
     }
 
-
     // STEP 1: Fetch Form Structure (Your Table Headers)
     // We strictly order fields so columns align correctly
     const formStructure = await prisma.form.findUnique({
@@ -119,7 +120,8 @@ router.get("/forms/:formId/responses", async (req, res) => {
       },
     });
 
-    if (!formStructure) return res.status(404).json({ message: "Form not found" });
+    if (!formStructure)
+      return res.status(404).json({ message: "Form not found" });
 
     // STEP 2: Fetch Responses (Your Table Rows)
     // We ONLY fetch the values, not the question labels again
@@ -169,7 +171,6 @@ router.get("/forms/:formId/responses", async (req, res) => {
         rows: tableRows,
       },
     });
-
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

@@ -37,6 +37,15 @@ router.post("/api/users/register",[authLimiter], async (req, res) => {
         name,
         email,
         password,
+        role: "USER",
+        razorpayCustomerId: null,
+        subscriptions: {
+          create: {
+            razorpaySubscriptionId: null,
+            status: "active",
+            price: 0,
+          },
+        },
       },
       select: {
         userId: true,
@@ -71,6 +80,15 @@ router.post("/api/users/login", [authLimiter],async (req, res) => {
 
     const user = await prisma.user.findUnique({
       where: { email },
+      select: {
+        userId: true,
+        name: true,
+        email: true,
+        password: true,
+        role: true,
+        createdAt: true,
+        plan: true,
+      },
     });
 
     if (!user) {
@@ -92,18 +110,7 @@ router.post("/api/users/login", [authLimiter],async (req, res) => {
   }
 });
 
-/**
- * READ - Get All Users
- * GET /users
- */
-// router.get("/api/users", async (req, res) => {
-//   try {
-//     const users = await prisma.user.findMany();
-//     res.status(200).json(users);
-//   } catch (error) {
-//     res.status(500).json({ error: error.message });
-//   }
-// });
+
 
 /**
  * READ - Get User profile By ID
@@ -123,10 +130,11 @@ router.get("/api/users/profile",[protect,trackActivity], async (req, res) => {
         email: true,
         role: true,
         createdAt: true,
-      },
+        plan: true,
+      }
     });
 
-    if (user === null || user === undefined || user === "" || !user) {
+    if (user === null || user === undefined  || !user) {
       return res.status(404).json({ message: "User not found" });
     }
 

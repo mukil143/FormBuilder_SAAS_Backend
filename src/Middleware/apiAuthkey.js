@@ -11,7 +11,7 @@ export const apiKeyAuth = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         message: "Missing x-api-key or x-api-secret headers"
-      });a
+      });
     }
 
     // 2. Find the Public Key in DB
