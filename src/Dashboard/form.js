@@ -1,6 +1,6 @@
 import express from "express";
 import { prisma } from "../config/db.js";
-import { checkFormList } from "../Middleware/accessGuard.js";
+import { checkAPIAccess, checkFormList } from "../Middleware/accessGuard.js";
 import { trackActivity } from "../Middleware/activityMiddleware.js";
 import { protect } from "../Middleware/authMiddleware.js";
 import { generateApiKeys } from "../utils/generateKeys.js";
@@ -669,7 +669,7 @@ router.put(
  * POST /api/dashboard/keys
  * Body: { name: "My Key" } (optional)
  */
-router.post("/api/dashboard/keys", [protect], async (req, res) => {
+router.post("/api/dashboard/keys", [protect,checkAPIAccess], async (req, res) => {
   try {
     const { userId } = req.user;
     const { name } = req.body; // e.g., "My E-commerce Site"
