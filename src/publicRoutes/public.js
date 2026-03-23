@@ -57,7 +57,6 @@ router.post(
     try {
       const { slug } = req.params;
       const { responses } = req.body;
-
       if (!responses || !Array.isArray(responses)) {
         return res
           .status(400)
@@ -66,7 +65,7 @@ router.post(
 
       // Find form by slug
       const form = await prisma.form.findUnique({
-        where: { slug: slug.toLowerCase() },
+        where: { slug: slug },
       });
       if (form === null || form === undefined) {
         return res.status(404).json({ message: "Form not found" });

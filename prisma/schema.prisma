@@ -181,7 +181,7 @@ model Subscription {
   status         RazorpayStatus
   // For simplicity, we can store the start and end dates of the subscription in the database.
   startDate      DateTime @default(now())
-  currentPeriodEnd     DateTime
+  currentPeriodEnd     DateTime 
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
   isActive       Boolean  @default(true)

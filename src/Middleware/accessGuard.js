@@ -36,10 +36,10 @@ export const checkFormList = async (req, res, next) => {
 
 export const checkResponseLimit = async (req, res, next) => {
   try {
-    const { formId } = req.params;
+    const { slug } = req.params;
 
     const form = await prisma.form.findUnique({
-      where: { formId },
+      where: { slug: slug.toLowerCase() },
       include: { user: true }, // Include the user to get their plan
     });
 
@@ -55,8 +55,8 @@ export const checkResponseLimit = async (req, res, next) => {
       return next(); // No limit, allow response submission
     }
 
-    const responseCount = await prisma.response.count({
-      where: { formId },
+    const responseCount = await prisma.formResponse.count({
+      where: { formId: form.formId },
     });
 
     if (responseCount >= PLAN_LIMITS[userPlan].maxResponses) {

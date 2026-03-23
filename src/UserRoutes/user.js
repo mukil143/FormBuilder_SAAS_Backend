@@ -39,13 +39,6 @@ router.post("/api/users/register",[authLimiter], async (req, res) => {
         password,
         role: "USER",
         razorpayCustomerId: null,
-        subscriptions: {
-          create: {
-            razorpaySubscriptionId: null,
-            status: "active",
-            price: 0,
-          },
-        },
       },
       select: {
         userId: true,
@@ -59,6 +52,7 @@ router.post("/api/users/register",[authLimiter], async (req, res) => {
 
     res.status(201).json({ message: "User created successfully", user });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ error: error.message });
   }
 });
