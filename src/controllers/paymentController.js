@@ -55,7 +55,6 @@ export const createSubscription = async (req, res) => {
         planType: planType,
       },
     });
-
     // 4. Send the Subscription ID to Frontend
     // The frontend will use this ID to open the Razorpay Payment Popup
     res.status(201).json({

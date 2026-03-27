@@ -69,7 +69,7 @@ model User {
 
   //reset password token and expiry
   resetToken        String? @unique
-  resetTokenExpiry  DateTime? 
+  resetTokenExpiry  DateTime?
   // Usage metrics
   formCount Int @default(0)
   // e.g., number of form responses submitted in the current month
@@ -181,7 +181,7 @@ model Subscription {
   subscriptionId String   @id @default(uuid())
   userId         String
   plan           PlanType @default(FREE)
-  status         RazorpayStatus
+  status         RazorpayStatus 
   // For simplicity, we can store the start and end dates of the subscription in the database.
   startDate      DateTime @default(now())
   currentPeriodEnd     DateTime

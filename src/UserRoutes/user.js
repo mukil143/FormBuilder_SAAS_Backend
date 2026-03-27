@@ -4,10 +4,11 @@ import generateToken from "../utils/generateToken.js";
 import { protect } from "../Middleware/authMiddleware.js";
 import { authLimiter } from "../Middleware/rateLimitMiddleware.js";
 import { trackActivity } from "../Middleware/activityMiddleware.js";
-import nodemailer from "nodemailer";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
+import { transporter } from "../utils/mailTransporter.js";
 const router = express.Router();
+
 
 /**
  * CREATE - Register User
@@ -311,13 +312,6 @@ router.post("/forgot-password", async (req, res) => {
       },
     });
     // Send email with reset link
-    const transporter = nodemailer.createTransport({
-      service: "Gmail",
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
 
     const mailOptions = {
       from: process.env.EMAIL_USER,
@@ -361,6 +355,12 @@ router.post("/reset-password/:token", async (req, res) => {
           message: "Token and new password are required",
         });
     }
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be at least 6 characters",
+      });
+    }
     const user = await prisma.user.findFirst({
       where: {
         resetToken: token,
@@ -370,15 +370,26 @@ router.post("/reset-password/:token", async (req, res) => {
       },
     });
 
+    if (!user) {
+      return res.status(400).json({ success: false, message: "Invalid token" });
+    }
+
     if (user.resetTokenExpiry < new Date()) {
       return res
         .status(400)
         .json({ success: false, message: "Token has expired" });
     }
-    if (!user) {
-      return res.status(400).json({ success: false, message: "Invalid token" });
+
+    const isSamePassword = await bcrypt.compare(newPassword, user.password);
+
+    if (isSamePassword) {
+      return res.status(400).json({
+        success: false,
+        message: "New password cannot be the same as the old password",
+      });
     }
     const hashedPassword = await bcrypt.hash(newPassword, 10);
+
     await prisma.user.update({
       where: { userId: user.userId },
       data: {
@@ -387,7 +398,17 @@ router.post("/reset-password/:token", async (req, res) => {
         resetTokenExpiry: null,
       },
     });
-    res.status(200).json({
+
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: user.email,
+      subject: "Password Reset Confirmation",
+      html: `<p>Your password has been reset successfully.</p>`,
+    };
+    await transporter.sendMail(mailOptions);
+
+    return res.status(200).json({
       success: true,
       message: "Password reset successfully",
     });
@@ -448,7 +469,17 @@ router.post("/api/users/change-password", [protect, trackActivity], async (req, 
       where: { userId },
       data: { password: hashedPassword },
     });
-    res.status(200).json({
+    //send confirmation email
+
+
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: user.email,
+      subject: "Password Change Confirmation",
+      html: `<p>Your password has been changed successfully.</p>`,
+    };
+    await transporter.sendMail(mailOptions);
+    return res.status(200).json({
       success: true,
       message: "Password changed successfully",
     });

@@ -1,8 +1,7 @@
 import crypto from "node:crypto";
 import { prisma } from "../config/db.js"; // Check if this path is correct for you
-import { PLAN_IDS, razorpay } from "../config/razorpay.js";
-
-
+import { PLAN_IDS } from "../config/razorpay.js";
+import { transporter } from "../utils/mailTransporter.js"; // Import the transporter from the new file
 
 const getPlanTypeFromId = (razorpayPlanId) => {
   const planKey = Object.keys(PLAN_IDS).find(
@@ -10,6 +9,8 @@ const getPlanTypeFromId = (razorpayPlanId) => {
   );
   return planKey || "FREE";
 };
+
+// This controller handles Razorpay webhooks for subscription events
 
 export const handleRazorpayWebhook = async (req, res) => {
   try {
@@ -33,122 +34,238 @@ export const handleRazorpayWebhook = async (req, res) => {
     // Use 'body' instead of 'req.body' for the rest of the logic
     const event = body.event;
     const payload = body.payload;
+    const subData = payload.subscription.entity;
 
     console.log(`🔔 Webhook Received: ${event}`);
 
-    switch (event) {
-      case "subscription.authenticated": {
-        const subData = payload.subscription.entity;
-        const { id, plan_id, current_end, notes } = subData;
-        const userId = notes.userId;
+    const handlers = {
+      "subscription.authenticated": handleAuthenticated,
+      "subscription.charged": handleCharged,
+      "subscription.cancelled": handleCancelledOrHalted,
+      "subscription.halted": handleCancelledOrHalted,
+    };
 
-        const planType = getPlanTypeFromId(plan_id);
-
-        // 🚨 THE FIX: FIND AND CANCEL ANY OLD ACTIVE SUBSCRIPTIONS FIRST
-        const oldActiveSubs = await prisma.subscription.findMany({
-          where: {
-            userId: userId,
-            status: "active",
-            razorpaySubscriptionId: { not: id }, // Exclude the new one they just paid for
-          },
-        });
-
-
-          //if they have an old active subscription, cancel it to prevent double billing
-          for (const oldSub of oldActiveSubs) {
-            try {
-              // Tell Razorpay to stop charging the old plan
-              await razorpay.subscriptions.cancel(
-                oldSub.razorpaySubscriptionId,
-                false,
-              );
-
-              // Mark as cancelled in our DB
-              await prisma.subscription.update({
-                where: { razorpaySubscriptionId: oldSub.razorpaySubscriptionId },
-                data: { status: "cancelled" },
-              });
-              console.log(
-                `♻️ Upgraded! Cancelled old plan: ${oldSub.razorpaySubscriptionId}`,
-              );
-            } catch (error) {
-              console.error(
-                "Failed to cancel old sub during upgrade:",
-                error,
-              );
-            }
-          }
-
-        await prisma.subscription.upsert({
-          where: { razorpaySubscriptionId: id },
-          update: {
-            status: "active",
-            currentPeriodEnd: new Date(current_end * 1000),
-          },
-          create: {
-            userId,
-            razorpaySubscriptionId: id,
-            plan: planType,
-            status: "active",
-            currentPeriodEnd: new Date(current_end * 1000),
-            isActive: true,
-          },
-        });
-
-        await prisma.user.update({
-          where: { userId },
-          data: { plan: planType },
-        });
-
-        console.log(`✅ User ${userId} upgraded to ${planType}`);
-        break;
+    const handler = handlers[event];
+    if (handler) {
+      const result = await handler(subData, event);
+      if (result === "already_processed") {
+        return res.json({ status: "already_processed" });
       }
-
-      case "subscription.charged": {
-        const subData = payload.subscription.entity;
-
-        await prisma.subscription.update({
-          where: { razorpaySubscriptionId: subData.id },
-          data: {
-            currentPeriodEnd: new Date(subData.current_end * 1000),
-            status: "active",
-          },
-        });
-
-        // Reset usage for the new month
-        const userId = subData.notes.userId;
-        await prisma.user.update({
-          where: { userId },
-          data: { monthlyResponseCount: 0 },
-        });
-
-        console.log(`✅ Subscription renewed for ${subData.id}`);
-        break;
-      }
-
-      case "subscription.cancelled":
-      case "subscription.halted": {
-        const subData = payload.subscription.entity;
-        const userId = subData.notes.userId;
-
-        await prisma.subscription.update({
-          where: { razorpaySubscriptionId: subData.id },
-          data: { status: "cancelled" },
-        });
-
-        await prisma.user.update({
-          where: { userId },
-          data: { plan: "FREE" },
-        });
-
-        console.log(`❌ Subscription cancelled for ${userId}`);
-        break;
-      }
+      return res.json({ status: "ok" });
+    } else {
+      console.error("⚠️ Invalid Webhook Event:", event);
+      return res.status(400).json({ status: "invalid_event" });
     }
-
-    res.json({ status: "ok" });
   } catch (error) {
     console.error("Webhook Error:", error);
-    res.status(200).json({ status: "error_handled" });
+    return res.status(200).json({ status: "error_handled" });
+  }
+};
+
+
+
+
+const handleAuthenticated = async (subData) => {
+  const { id, plan_id, current_end, notes } = subData;
+  const userId = notes.userId;
+  const planType = getPlanTypeFromId(plan_id);
+
+  // ✅ Idempotency
+  const existing = await prisma.subscription.findUnique({
+    where: { razorpaySubscriptionId: id },
+  });
+
+  if (existing?.status === "active") {
+    console.log("Already processed authenticated");
+    return "already_processed";
+  }
+
+  // ✅ Deactivate old subscriptions (DB only)
+  await prisma.subscription.updateMany({
+    where: {
+      userId,
+      status: "active",
+      razorpaySubscriptionId: { not: id },
+    },
+    data: {
+      status: "cancelled",
+      isActive: false,
+    },
+  });
+
+  // ✅ Upsert new subscription
+  await prisma.subscription.upsert({
+    where: { razorpaySubscriptionId: id },
+    update: {
+      status: "active",
+      currentPeriodEnd: new Date(current_end * 1000),
+    },
+    create: {
+      userId,
+      razorpaySubscriptionId: id,
+      plan: planType,
+      status: "active",
+      currentPeriodEnd: new Date(current_end * 1000),
+      isActive: true,
+    },
+  });
+
+  // ✅ Update user plan
+  await prisma.user.update({
+    where: { userId },
+    data: { plan: planType },
+  });
+
+  const user = await prisma.user.findUnique({ where: { userId } });
+  if (!user) throw new Error("User not found");
+
+  await transporter.sendMail({
+    from: process.env.EMAIL_USER,
+    to: user.email,
+    subject: "Subscription Upgraded",
+    text: `Your subscription has been upgraded to ${planType}`,
+  });
+
+  console.log(`✅ User ${userId} upgraded to ${planType}`);
+  return "ok";
+};
+
+const handleCharged = async (subData, event) => {
+  const { id, plan_id, current_end, notes } = subData;
+  const userId = notes.userId;
+
+  try {
+    const existing = await prisma.subscription.findUnique({
+      where: { razorpaySubscriptionId: id },
+    });
+
+    if (existing?.status === "active") {
+      console.log("Already processed");
+      return "already_processed";
+    }
+
+    await prisma.subscription.upsert({
+      where: { razorpaySubscriptionId: id },
+      update: {
+        status: "active",
+        currentPeriodEnd: new Date(current_end * 1000),
+      },
+      create: {
+        userId,
+        razorpaySubscriptionId: id,
+        plan: getPlanTypeFromId(plan_id),
+        status: "active",
+        currentPeriodEnd: new Date(current_end * 1000),
+        isActive: true,
+      },
+    });
+
+    await prisma.user.update({
+      where: { userId },
+      data: { monthlyResponseCount: 0 },
+    });
+
+    const user = await prisma.user.findUnique({ where: { userId } });
+
+    if (user) {
+      await transporter.sendMail({
+        from: process.env.EMAIL_USER,
+        to: user.email,
+        subject: "Subscription Renewed",
+        text: `Your subscription has been renewed`,
+      });
+    }
+
+    console.log(`✅ Subscription renewed for ${id}`);
+    return "ok";
+  } catch (error) {
+    console.error("DB Error:", error);
+    return "error";
+  }
+};
+
+
+const handleCancelledOrHalted = async (subData, event) => {
+  try {
+    const { id, notes } = subData;
+    const userId = notes.userId;
+
+    const status = event === "subscription.cancelled" ? "cancelled" : "halted";
+
+    console.log(
+      event === "subscription.halted"
+        ? `⚠️ Payment failed for ${userId}`
+        : `❌ Subscription cancelled for ${userId}`,
+    );
+
+    // ✅ Idempotency
+    const existing = await prisma.subscription.findUnique({
+      where: { razorpaySubscriptionId: id },
+    });
+
+    if (existing?.status === status) {
+      console.log("Already processed");
+      return "already_processed";
+    }
+
+    // ✅ Correct status update
+    await prisma.subscription.upsert({
+      where: { razorpaySubscriptionId: id },
+      update: {
+        status, // ✅ FIXED
+        isActive: false,
+      },
+      create: {
+        userId,
+        razorpaySubscriptionId: id,
+        status, // ✅ FIXED
+        currentPeriodEnd: new Date(),
+        isActive: false,
+      },
+    });
+
+    // ✅ Determine user plan from DB
+    const activeSub = await prisma.subscription.findFirst({
+      where: {
+        userId,
+        status: "active",
+        isActive: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    await prisma.user.update({
+      where: { userId },
+      data: {
+        plan: activeSub ? activeSub.plan : "FREE",
+      },
+    });
+
+    if (activeSub) {
+      console.log(`⚠️ Active plan exists (${activeSub.plan})`);
+    } else {
+      console.log("⬇️ User downgraded to FREE");
+    }
+
+    // ✅ Email
+    const user = await prisma.user.findUnique({ where: { userId } });
+    if (!user) throw new Error("User not found");
+
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: user.email,
+      subject:
+        status === "cancelled" ? "Subscription Cancelled" : "Payment Failed",
+      text:
+        status === "cancelled"
+          ? "Your subscription has been cancelled"
+          : "Payment failed. Please update your payment method.",
+    });
+
+    console.log(`✅ Subscription ${status} for ${userId}`);
+    return "ok";
+  } catch (error) {
+    console.error("Cancel/Halt Error:", error);
+    return "error";
   }
 };
