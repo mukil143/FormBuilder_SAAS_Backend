@@ -4,13 +4,16 @@ import generateToken from "../utils/generateToken.js";
 import { protect } from "../Middleware/authMiddleware.js";
 import { authLimiter } from "../Middleware/rateLimitMiddleware.js";
 import { trackActivity } from "../Middleware/activityMiddleware.js";
+import nodemailer from "nodemailer";
+import crypto from "node:crypto";
+import bcrypt from "bcryptjs";
 const router = express.Router();
 
 /**
  * CREATE - Register User
  * POST /register
  */
-router.post("/api/users/register",[authLimiter], async (req, res) => {
+router.post("/api/users/register", [authLimiter], async (req, res) => {
   try {
     const { name, email, password } = req.body;
     if (!name || !email || !password) {
@@ -25,18 +28,19 @@ router.post("/api/users/register",[authLimiter], async (req, res) => {
         .json({ message: "Password must be at least 6 characters" });
     }
     const existingUser = await prisma.user.findUnique({
-      where: { email },
+      where: { email: email.toLowerCase() },
     });
 
     if (existingUser) {
       return res.status(400).json({ message: "User already exists" });
     }
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await prisma.user.create({
       data: {
         name,
-        email,
-        password,
+        email : email.toLowerCase(),
+        password: hashedPassword,
         role: "USER",
         razorpayCustomerId: null,
       },
@@ -48,7 +52,6 @@ router.post("/api/users/register",[authLimiter], async (req, res) => {
         createdAt: true,
       },
     });
-
 
     res.status(201).json({ message: "User created successfully", user });
   } catch (error) {
@@ -62,7 +65,7 @@ router.post("/api/users/register",[authLimiter], async (req, res) => {
  * POST /login
  */
 
-router.post("/api/users/login", [authLimiter],async (req, res) => {
+router.post("/api/users/login", [authLimiter], async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -88,9 +91,22 @@ router.post("/api/users/login", [authLimiter],async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: "User  not found" });
     }
-    if (user.password !== password) {
-      return res.status(401).json({ message: "Invalid password" });
+
+    if (user.email !== email.toLowerCase()) {
+      return res.status(401).json({
+        message: "Email not found",
+      })
     }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch) {
+      return res.status(401).json({
+        message: "Invalid credentials",
+      });
+    }
+
+
 
     user.password = undefined; // Remove password from user object
 
@@ -104,13 +120,11 @@ router.post("/api/users/login", [authLimiter],async (req, res) => {
   }
 });
 
-
-
 /**
  * READ - Get User profile By ID
  * GET /users/:id
  */
-router.get("/api/users/profile",[protect,trackActivity], async (req, res) => {
+router.get("/api/users/profile", [protect, trackActivity], async (req, res) => {
   try {
     const { userId } = req.user;
 
@@ -125,17 +139,25 @@ router.get("/api/users/profile",[protect,trackActivity], async (req, res) => {
         role: true,
         createdAt: true,
         plan: true,
-      }
+      },
     });
 
-    if (user === null || user === undefined  || !user) {
+    if (user === null || user === undefined || !user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    res.status(200).json({success: true, message: "User profile fetched successfully", data: user});
+    res.status(200).json({
+      success: true,
+      message: "User profile fetched successfully",
+      data: user,
+    });
   } catch (error) {
     console.error(error);
-    res.status(500).json({success: false, message: "Internal server error", error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
   }
 });
 
@@ -143,92 +165,301 @@ router.get("/api/users/profile",[protect,trackActivity], async (req, res) => {
  * UPDATE - Update User
  * PUT /users/:id
  */
-router.put("/api/users/profile/update", [protect,trackActivity],async (req, res) => {
-  try {
-    const { userId } = req.user;
-    const { name, email } = req.body;
+router.put(
+  "/api/users/profile/update",
+  [protect, trackActivity],
+  async (req, res) => {
+    try {
+      const { userId } = req.user;
+      const { name, email } = req.body;
 
+      const user = await prisma.user.update({
+        where: {
+          userId: userId,
+        },
 
-    const user = await prisma.user.update({
-      where: {
-        userId: userId,
-      },
+        data: {
+          name,
+          email,
+        },
+        select: {
+          userId: true,
+          name: true,
+          email: true,
+          role: true,
+          createdAt: true,
+        },
+      });
 
-      data: {
-        name,
-        email,
-      },
-      select: {
-        userId: true,
-        name: true,
-        email: true,
-        role: true,
-        createdAt: true,
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
       }
-    });
 
-
-    if(!user) {
-      return res.status(404).json({ message: "User not found" });
+      res.status(200).json({
+        success: true,
+        message: "User updated successfully",
+        data: user,
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
     }
-
-    res.status(200).json({
-      success: true,
-      message: "User updated successfully",
-      data: user
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({success: false, message: "Internal server error", error: error.message });
-  }
-});
+  },
+);
 
 /**
  * DELETE - Delete User
  * DELETE /users/:id
  */
-router.delete("/api/users/profile/delete", [protect,trackActivity],async (req, res) => {
-  try {
-    const { userId } = req.user;
-    const { password } = req.body;
+router.delete(
+  "/api/users/profile/delete",
+  [protect, trackActivity],
+  async (req, res) => {
+    try {
+      const { userId } = req.user;
+      const { password } = req.body;
 
-    if (!password) {
-      return res.status(400).json({success: false,message: "Password is required" });
-    }
-
-    if(password.length < 6) {
-      return res.status(400).json({success: false,message: "Password must be at least 6 characters" });
-    }
-
-
-    const user = await prisma.user.findUnique({
-      where: {
-        userId: userId,
-      },
-      select: {
-        password: true,
-        userId: true,
+      if (!password) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Password is required" });
       }
 
+      if (password.length < 6) {
+        return res.status(400).json({
+          success: false,
+          message: "Password must be at least 6 characters",
+        });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: {
+          userId: userId,
+        },
+        select: {
+          password: true,
+          userId: true,
+        },
+      });
+
+      if (user.userId !== userId) {
+        return res
+          .status(401)
+          .json({ success: false, message: "Not authorized" });
+      }
+
+      if (user.password !== password) {
+        return res
+          .status(401)
+          .json({ success: false, message: "Invalid password" });
+      }
+
+      await prisma.user.delete({
+        where: {
+          userId: userId,
+        },
+      });
+
+      res
+        .status(200)
+        .json({ success: true, message: "User deleted successfully" });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  },
+);
+
+/**
+ * FORGOT PASSWORD - Send reset link to email
+ * POST /forgot-password
+ * Access Control: Public
+ */
+
+router.post("/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Email is required" });
+    }
+    const user = await prisma.user.findUnique({
+      where: { email },
     });
 
-    if(user.userId !== userId){
-      return res.status(401).json({success: false, message: "Not authorized" });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour from now
 
-    if (user.password !== password) {
-      return res.status(401).json({ success: false,message: "Invalid password" });
-    }
-
-    await prisma.user.delete({
-      where: {
-        userId: userId,
+    await prisma.user.update({
+      where: { email },
+      data: {
+        resetToken,
+        resetTokenExpiry,
+      },
+    });
+    // Send email with reset link
+    const transporter = nodemailer.createTransport({
+      service: "Gmail",
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
       },
     });
 
-    res.status(200).json({success: true, message: "User deleted successfully" });
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "Password Reset",
+      html: `<p>You requested a password reset. Click the link below to reset your password:</p>
+             <a href="${process.env.FRONTEND_URL}/reset-password?token=${resetToken}">Reset Password</a>
+             <p>This link will expire in 1 hour.</p>`,
+    };
+    await transporter.sendMail(mailOptions);
+
+    res.status(200).json({
+      success: true,
+      message: "Password reset link sent to your email",
+    });
   } catch (error) {
-    res.status(500).json({success: false, message: "Internal server error", error: error.message });
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
   }
 });
+
+/**
+ * RESET PASSWORD - Reset password using token
+ * POST /reset-password
+ * Access Control: Public
+ * Request Body: { token, newPassword }
+ */
+router.post("/reset-password/:token", async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { newPassword } = req.body;
+    if (!token || !newPassword) {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Token and new password are required",
+        });
+    }
+    const user = await prisma.user.findFirst({
+      where: {
+        resetToken: token,
+        resetTokenExpiry: {
+          gt: new Date(), // Check if token is not expired
+        },
+      },
+    });
+
+    if (user.resetTokenExpiry < new Date()) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Token has expired" });
+    }
+    if (!user) {
+      return res.status(400).json({ success: false, message: "Invalid token" });
+    }
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { userId: user.userId },
+      data: {
+        password: hashedPassword,
+        resetToken: null,
+        resetTokenExpiry: null,
+      },
+    });
+    res.status(200).json({
+      success: true,
+      message: "Password reset successfully",
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
+
+/**
+ * PASSWORD CHANGE - Change password for logged in user
+ * POST /api/users/change-password
+ * Access Control: Private
+ */
+router.post("/api/users/change-password", [protect, trackActivity], async (req, res) => {
+  try {
+    const { userId } = req.user;
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Current password and new password are required",
+        });
+    }
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be at least 6 characters",
+      });
+    }
+    if (currentPassword === newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "New password cannot be the same as the current password",
+      });
+    }
+    const user = await prisma.user.findUnique({
+      where: { userId },
+    });
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Current password is incorrect" });
+    }
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { userId },
+      data: { password: hashedPassword },
+    });
+    res.status(200).json({
+      success: true,
+      message: "Password changed successfully",
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
+
 export default router;
