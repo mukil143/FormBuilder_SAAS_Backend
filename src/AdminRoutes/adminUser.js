@@ -3,6 +3,7 @@ import { prisma } from "../config/db.js";
 import { admin, protect } from "../Middleware/authMiddleware.js";
 const router = express.Router();
 import { trackActivity } from "../Middleware/activityMiddleware.js";
+import { hashPassword } from "../utils/hashPassword.js";
 /**
  * GET ALL USERS
  * GET /api/admin/users
@@ -22,6 +23,7 @@ router.get(
           name: true,
           email: true,
           role: true,
+          plan: true,
           lastActiveAt: true, // 👈 Fetch the timestamp
           createdAt: true,
         },
@@ -104,11 +106,14 @@ router.post(
         });
       }
 
+      const passwordHash = await hashPassword(password);
+
+
       const user = await prisma.user.create({
         data: {
           name,
           email,
-          password,
+          password: passwordHash,
           role,
         },
       });
@@ -154,6 +159,8 @@ router.put(
         });
       }
 
+      const hasedPassword = await hashPassword(password);
+
       const user = await prisma.user.update({
         where: {
           userId: id,
@@ -161,7 +168,7 @@ router.put(
         data: {
           name,
           email,
-          password,
+          password: hasedPassword,
           role,
         },
       });

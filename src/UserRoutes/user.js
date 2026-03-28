@@ -5,10 +5,11 @@ import { protect } from "../Middleware/authMiddleware.js";
 import { authLimiter } from "../Middleware/rateLimitMiddleware.js";
 import { trackActivity } from "../Middleware/activityMiddleware.js";
 import crypto from "node:crypto";
-import bcrypt from "bcryptjs";
 import { transporter } from "../utils/mailTransporter.js";
-const router = express.Router();
+import { hashPassword, comparePassword } from "../utils/hashPassword.js";
+import { razorpay } from "../config/razorpay.js";
 
+const router = express.Router();
 
 /**
  * CREATE - Register User
@@ -35,12 +36,13 @@ router.post("/api/users/register", [authLimiter], async (req, res) => {
     if (existingUser) {
       return res.status(400).json({ message: "User already exists" });
     }
-    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const hashedPassword = await hashPassword(password);
 
     const user = await prisma.user.create({
       data: {
         name,
-        email : email.toLowerCase(),
+        email: email.toLowerCase(),
         password: hashedPassword,
         role: "USER",
         razorpayCustomerId: null,
@@ -96,18 +98,16 @@ router.post("/api/users/login", [authLimiter], async (req, res) => {
     if (user.email !== email.toLowerCase()) {
       return res.status(401).json({
         message: "Email not found",
-      })
+      });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
+    const isMatch = await comparePassword(password, user.password);
 
     if (!isMatch) {
       return res.status(401).json({
         message: "Invalid credentials",
       });
     }
-
-
 
     user.password = undefined; // Remove password from user object
 
@@ -247,13 +247,21 @@ router.delete(
         },
       });
 
+      if (!user) {
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found" });
+      }
+
       if (user.userId !== userId) {
         return res
           .status(401)
           .json({ success: false, message: "Not authorized" });
       }
 
-      if (user.password !== password) {
+      const isMatch = await comparePassword(password, user.password);
+
+      if (!isMatch) {
         return res
           .status(401)
           .json({ success: false, message: "Invalid password" });
@@ -348,12 +356,10 @@ router.post("/reset-password/:token", async (req, res) => {
     const { token } = req.params;
     const { newPassword } = req.body;
     if (!token || !newPassword) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Token and new password are required",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Token and new password are required",
+      });
     }
     if (newPassword.length < 6) {
       return res.status(400).json({
@@ -380,7 +386,7 @@ router.post("/reset-password/:token", async (req, res) => {
         .json({ success: false, message: "Token has expired" });
     }
 
-    const isSamePassword = await bcrypt.compare(newPassword, user.password);
+    const isSamePassword = await comparePassword(newPassword, user.password);
 
     if (isSamePassword) {
       return res.status(400).json({
@@ -388,7 +394,7 @@ router.post("/reset-password/:token", async (req, res) => {
         message: "New password cannot be the same as the old password",
       });
     }
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const hashedPassword = await hashPassword(newPassword);
 
     await prisma.user.update({
       where: { userId: user.userId },
@@ -398,7 +404,6 @@ router.post("/reset-password/:token", async (req, res) => {
         resetTokenExpiry: null,
       },
     });
-
 
     const mailOptions = {
       from: process.env.EMAIL_USER,
@@ -422,75 +427,77 @@ router.post("/reset-password/:token", async (req, res) => {
   }
 });
 
-
 /**
  * PASSWORD CHANGE - Change password for logged in user
  * POST /api/users/change-password
  * Access Control: Private
  */
-router.post("/api/users/change-password", [protect, trackActivity], async (req, res) => {
-  try {
-    const { userId } = req.user;
-    const { currentPassword, newPassword } = req.body;
-    if (!currentPassword || !newPassword) {
-      return res
-        .status(400)
-        .json({
+router.post(
+  "/api/users/change-password",
+  [protect, trackActivity],
+  async (req, res) => {
+    try {
+      const { userId } = req.user;
+      const { currentPassword, newPassword } = req.body;
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({
           success: false,
           message: "Current password and new password are required",
         });
-    }
-    if (newPassword.length < 6) {
-      return res.status(400).json({
+      }
+      if (newPassword.length < 6) {
+        return res.status(400).json({
+          success: false,
+          message: "New password must be at least 6 characters",
+        });
+      }
+      if (currentPassword === newPassword) {
+        return res.status(400).json({
+          success: false,
+          message: "New password cannot be the same as the current password",
+        });
+      }
+      const user = await prisma.user.findUnique({
+        where: { userId },
+      });
+      if (!user) {
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found" });
+      }
+      const isMatch = await comparePassword(currentPassword, user.password);
+      if (!isMatch) {
+        return res
+          .status(401)
+          .json({ success: false, message: "Current password is incorrect" });
+      }
+      const hashedPassword = await hashPassword(newPassword);
+      await prisma.user.update({
+        where: { userId },
+        data: { password: hashedPassword },
+      });
+      //send confirmation email
+
+      const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: user.email,
+        subject: "Password Change Confirmation",
+        html: `<p>Your password has been changed successfully.</p>`,
+      };
+      await transporter.sendMail(mailOptions);
+      return res.status(200).json({
+        success: true,
+        message: "Password changed successfully",
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({
         success: false,
-        message: "New password must be at least 6 characters",
+        message: "Internal server error",
+        error: error.message,
       });
     }
-    if (currentPassword === newPassword) {
-      return res.status(400).json({
-        success: false,
-        message: "New password cannot be the same as the current password",
-      });
-    }
-    const user = await prisma.user.findUnique({
-      where: { userId },
-    });
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
-    }
-    const isMatch = await bcrypt.compare(currentPassword, user.password);
-    if (!isMatch) {
-      return res
-        .status(401)
-        .json({ success: false, message: "Current password is incorrect" });
-    }
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await prisma.user.update({
-      where: { userId },
-      data: { password: hashedPassword },
-    });
-    //send confirmation email
-
-
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: user.email,
-      subject: "Password Change Confirmation",
-      html: `<p>Your password has been changed successfully.</p>`,
-    };
-    await transporter.sendMail(mailOptions);
-    return res.status(200).json({
-      success: true,
-      message: "Password changed successfully",
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error",
-      error: error.message,
-    });
-  }
-});
+  },
+);
 
 export default router;

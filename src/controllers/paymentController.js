@@ -24,24 +24,51 @@ export const createSubscription = async (req, res) => {
         .json({ success: false, message: "User not found" });
     }
 
-    // 2. Get or Create Razorpay Customer ID
-    // We reuse the ID if it exists to keep billing history clean.
+    
+
     let customerId = user.razorpayCustomerId;
 
-    if (customerId === null || customerId === undefined || customerId === "") {
-      const customer = await razorpay.customers.create({
-        name: user.name,
-        email: user.email,
-        fail_existing: 0, // If email exists in Razorpay, return that customer
-      });
-      customerId = customer.id;
-    }
+    if (!customerId) {
+      try {
+        const customer = await razorpay.customers.create({
+          name: user.name,
+          email: user.email,
+          contact: user.phone || "9999999999", // ✅ IMPORTANT
+          fail_existing: 0,
+        });
 
-    // Save it to our DB for next time
-    await prisma.user.update({
-      where: { userId },
-      data: { razorpayCustomerId: customerId },
-    });
+        customerId = customer.id;
+
+        await prisma.user.update({
+          where: { userId },
+          data: { razorpayCustomerId: customerId },
+        });
+      } catch (error) {
+        // 🔥 Handle "already exists" manually
+        if (error?.error?.description?.includes("already exists")) {
+          console.log("⚠️ Customer exists in Razorpay, fetching manually...");
+
+          // Fetch customers list
+          const customers = await razorpay.customers.all({ count: 100 });
+
+          const existing = customers.items.find((c) => c.email === user.email);
+
+          if (!existing) {
+            throw new Error("Customer exists but not found in fetch");
+          }
+
+          customerId = existing.id;
+
+          // Save to DB again
+          await prisma.user.update({
+            where: { userId },
+            data: { razorpayCustomerId: customerId },
+          });
+        } else {
+          throw error;
+        }
+      }
+    }
 
     // 3. Create the Subscription on Razorpay
     // This tells Razorpay: "Start a monthly charge for this customer on this plan"
@@ -55,6 +82,7 @@ export const createSubscription = async (req, res) => {
         planType: planType,
       },
     });
+
     // 4. Send the Subscription ID to Frontend
     // The frontend will use this ID to open the Razorpay Payment Popup
     res.status(201).json({
