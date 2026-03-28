@@ -107,3 +107,9 @@ export const checkAPIAccess = async (req, res, next) => {
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 }
+
+
+/**
+ * Check Form Theme accesss
+ * 
+ */
