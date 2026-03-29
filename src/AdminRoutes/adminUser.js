@@ -486,11 +486,15 @@ router.post(
           message: "User already exists",
         });
       }
+
+      const passwordHash = await hashPassword(password);
+
+
       const user = await prisma.user.create({
         data: {
           name,
           email,
-          password,
+          password : passwordHash,
           role: "ADMIN",
         },
       });
