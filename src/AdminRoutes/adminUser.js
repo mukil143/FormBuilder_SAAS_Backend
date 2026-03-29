@@ -3,7 +3,7 @@ import { prisma } from "../config/db.js";
 import { admin, protect } from "../Middleware/authMiddleware.js";
 const router = express.Router();
 import { trackActivity } from "../Middleware/activityMiddleware.js";
-import { hashPassword } from "../utils/hashPassword.js";
+import { comparePassword, hashPassword } from "../utils/hashPassword.js";
 /**
  * GET ALL USERS
  * GET /api/admin/users
@@ -108,7 +108,6 @@ router.post(
 
       const passwordHash = await hashPassword(password);
 
-
       const user = await prisma.user.create({
         data: {
           name,
@@ -146,7 +145,7 @@ router.put(
     try {
       const { id } = req.params;
       const { name, email, password, role } = req.body;
-      if (!name || !email || !password) {
+      if (!name || !email ) {
         return res.status(400).json({
           success: false,
           message: "All fields are required",
@@ -462,11 +461,7 @@ router.post(
     try {
       const { name, email, password } = req.body;
 
-      if (
-        !name ||
-        !email ||
-        !password
-      ) {
+      if (!name || !email || !password) {
         return res.status(400).json({
           success: false,
           message: "All fields are required",
@@ -479,6 +474,7 @@ router.post(
           message: "Password must be at least 6 characters",
         });
       }
+
       const existingUser = await prisma.user.findUnique({
         where: {
           email,
@@ -498,6 +494,7 @@ router.post(
           role: "ADMIN",
         },
       });
+
       res.status(201).json({
         success: true,
         message: "Admin created successfully",
@@ -621,7 +618,9 @@ router.delete(
           message: "Admin not found",
         });
       }
-      if (admin.password !== password) {
+
+      const isMatch = await comparePassword(password, admin.password);
+      if (!isMatch) {
         return res.status(401).json({
           success: false,
           message: "Password is incorrect",
