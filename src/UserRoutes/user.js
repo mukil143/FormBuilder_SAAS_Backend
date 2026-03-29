@@ -7,6 +7,7 @@ import { trackActivity } from "../Middleware/activityMiddleware.js";
 import crypto from "node:crypto";
 import { hashPassword, comparePassword } from "../utils/hashPassword.js";
 import { transporter } from "../utils/mailTransporter.js";
+import nodemailer from "nodemailer";
 
 const router = express.Router();
 
@@ -319,16 +320,35 @@ router.post("/forgot-password", async (req, res) => {
       },
     });
     // Send email with reset link
-
-    const mailOptions = {
-      from: "mukilanmukilan174@gmail.com",
-      to: email,
-      subject: "Password Reset",
-      html: `<p>You requested a password reset. Click the link below to reset your password:</p>
+    try {
+      const mailOptions = {
+        from: "mukilanmukilan174@gmail.com",
+        to: email,
+        subject: "Password Reset",
+        html: `<p>You requested a password reset. Click the link below to reset your password:</p>
              <a href="${process.env.FRONTEND_URL}/reset-password?token=${resetToken}">Reset Password</a>
              <p>This link will expire in 1 hour.</p>`,
-    };
-    await transporter.sendMail(mailOptions);
+      };
+      const res = await transporter.sendMail(mailOptions);
+
+      console.log("Email sent: " + res.messageId);
+      console.log("Preview URL: " + nodemailer.getTestMessageUrl(res));
+    } catch (err) {
+      switch (err.code) {
+        case "ECONNECTION":
+        case "ETIMEDOUT":
+          console.error("Network error - retry later:", err.message);
+          break;
+        case "EAUTH":
+          console.error("Authentication failed:", err.message);
+          break;
+        case "EENVELOPE":
+          console.error("Invalid recipients:", err.rejected);
+          break;
+        default:
+          console.error("Send failed:", err.message);
+      }
+    }
 
     res.status(200).json({
       success: true,
@@ -403,14 +423,34 @@ router.post("/reset-password/:token", async (req, res) => {
         resetTokenExpiry: null,
       },
     });
+    //send confirmation email
+    try {
+      const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: user.email,
+        subject: "Password Reset Confirmation",
+        html: `<p>Your password has been reset successfully.</p>`,
+      };
+      const res = await transporter.sendMail(mailOptions);
 
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: user.email,
-      subject: "Password Reset Confirmation",
-      html: `<p>Your password has been reset successfully.</p>`,
-    };
-    await transporter.sendMail(mailOptions);
+      console.log("Email sent: " + res.messageId);
+      console.log("Preview URL: " + nodemailer.getTestMessageUrl(res));
+    } catch (err) {
+      switch (err.code) {
+        case "ECONNECTION":
+        case "ETIMEDOUT":
+          console.error("Network error - retry later:", err.message);
+          break;
+        case "EAUTH":
+          console.error("Authentication failed:", err.message);
+          break;
+        case "EENVELOPE":
+          console.error("Invalid recipients:", err.rejected);
+          break;
+        default:
+          console.error("Send failed:", err.message);
+      }
+    }
 
     return res.status(200).json({
       success: true,
@@ -475,15 +515,35 @@ router.post(
         where: { userId },
         data: { password: hashedPassword },
       });
-      //send confirmation email
 
-      const mailOptions = {
-        from: process.env.EMAIL_USER,
-        to: user.email,
-        subject: "Password Change Confirmation",
-        html: `<p>Your password has been changed successfully.</p>`,
-      };
-      await transporter.sendMail(mailOptions);
+      //send confirmation email
+      try {
+        const mailOptions = {
+          from: process.env.EMAIL_USER,
+          to: user.email,
+          subject: "Password Change Confirmation",
+          html: `<p>Your password has been changed successfully.</p>`,
+        };
+        const res = await transporter.sendMail(mailOptions);
+        console.log("Email sent: " + res.messageId);
+        console.log("Preview URL: " + nodemailer.getTestMessageUrl(res));
+      } catch (err) {
+        switch (err.code) {
+          case "ECONNECTION":
+          case "ETIMEDOUT":
+            console.error("Network error - retry later:", err.message);
+            break;
+          case "EAUTH":
+            console.error("Authentication failed:", err.message);
+            break;
+          case "EENVELOPE":
+            console.error("Invalid recipients:", err.rejected);
+            break;
+          default:
+            console.error("Send failed:", err.message);
+        }
+      }
+
       return res.status(200).json({
         success: true,
         message: "Password changed successfully",
