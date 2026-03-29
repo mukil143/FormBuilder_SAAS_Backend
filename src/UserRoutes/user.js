@@ -5,9 +5,8 @@ import { protect } from "../Middleware/authMiddleware.js";
 import { authLimiter } from "../Middleware/rateLimitMiddleware.js";
 import { trackActivity } from "../Middleware/activityMiddleware.js";
 import crypto from "node:crypto";
-import { transporter } from "../utils/mailTransporter.js";
 import { hashPassword, comparePassword } from "../utils/hashPassword.js";
-import { razorpay } from "../config/razorpay.js";
+import { transporter } from "../utils/mailTransporter.js";
 
 const router = express.Router();
 
@@ -322,7 +321,7 @@ router.post("/forgot-password", async (req, res) => {
     // Send email with reset link
 
     const mailOptions = {
-      from: process.env.EMAIL_USER,
+      from: "mukilanmukilan174@gmail.com",
       to: email,
       subject: "Password Reset",
       html: `<p>You requested a password reset. Click the link below to reset your password:</p>

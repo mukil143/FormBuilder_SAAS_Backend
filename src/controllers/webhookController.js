@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
 import { prisma } from "../config/db.js"; // Check if this path is correct for you
 import { PLAN_IDS } from "../config/razorpay.js";
-import { transporter } from "../utils/mailTransporter.js"; // Import the transporter from the new file
+// Import the transporter from the new file
+import { transporter } from "../utils/mailTransporter.js";
 
 const getPlanTypeFromId = (razorpayPlanId) => {
   const planKey = Object.keys(PLAN_IDS).find(
@@ -62,9 +63,6 @@ export const handleRazorpayWebhook = async (req, res) => {
   }
 };
 
-
-
-
 const handleAuthenticated = async (subData) => {
   const { id, plan_id, current_end, notes } = subData;
   const userId = notes.userId;
@@ -118,13 +116,13 @@ const handleAuthenticated = async (subData) => {
 
   const user = await prisma.user.findUnique({ where: { userId } });
   if (!user) throw new Error("User not found");
-
-  await transporter.sendMail({
+  const mailOptions = {
     from: process.env.EMAIL_USER,
     to: user.email,
     subject: "Subscription Upgraded",
     text: `Your subscription has been upgraded to ${planType}`,
-  });
+  };
+  await transporter.sendMail(mailOptions);
 
   console.log(`✅ User ${userId} upgraded to ${planType}`);
   return "ok";
@@ -168,12 +166,13 @@ const handleCharged = async (subData, event) => {
     const user = await prisma.user.findUnique({ where: { userId } });
 
     if (user) {
-      await transporter.sendMail({
+      const mailOptions = {
         from: process.env.EMAIL_USER,
         to: user.email,
         subject: "Subscription Renewed",
         text: `Your subscription has been renewed`,
-      });
+      };
+      await transporter.sendMail(mailOptions);
     }
 
     console.log(`✅ Subscription renewed for ${id}`);
@@ -183,7 +182,6 @@ const handleCharged = async (subData, event) => {
     return "error";
   }
 };
-
 
 const handleCancelledOrHalted = async (subData, event) => {
   try {
@@ -250,8 +248,7 @@ const handleCancelledOrHalted = async (subData, event) => {
     // ✅ Email
     const user = await prisma.user.findUnique({ where: { userId } });
     if (!user) throw new Error("User not found");
-
-    await transporter.sendMail({
+    const mailOptions = {
       from: process.env.EMAIL_USER,
       to: user.email,
       subject:
@@ -260,7 +257,8 @@ const handleCancelledOrHalted = async (subData, event) => {
         status === "cancelled"
           ? "Your subscription has been cancelled"
           : "Payment failed. Please update your payment method.",
-    });
+    };
+    await transporter.sendMail(mailOptions);
 
     console.log(`✅ Subscription ${status} for ${userId}`);
     return "ok";
