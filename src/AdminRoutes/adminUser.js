@@ -145,32 +145,44 @@ router.put(
     try {
       const { id } = req.params;
       const { name, email, password, role } = req.body;
-      if (!name || !email ) {
+      if (!name || !email) {
         return res.status(400).json({
           success: false,
           message: "All fields are required",
         });
       }
-      if (password.length < 6) {
+      if (password && password.length < 6) {
         return res.status(400).json({
           success: false,
           message: "Password must be at least 6 characters",
         });
       }
-
-      const hasedPassword = await hashPassword(password);
-
-      const user = await prisma.user.update({
-        where: {
-          userId: id,
-        },
-        data: {
-          name,
-          email,
-          password: hasedPassword,
-          role,
-        },
-      });
+      let user;
+      if (password) {
+        const hasedPassword = await hashPassword(password);
+        user = await prisma.user.update({
+          where: {
+            userId: id,
+          },
+          data: {
+            name,
+            email,
+            password: hasedPassword,
+            role,
+          },
+        });
+      } else {
+        user = await prisma.user.update({
+          where: {
+            userId: id,
+          },
+          data: {
+            name,
+            email,
+            role,
+          },
+        });
+      }
 
       if (user === null) {
         return res.status(404).json({
@@ -489,12 +501,11 @@ router.post(
 
       const passwordHash = await hashPassword(password);
 
-
       const user = await prisma.user.create({
         data: {
           name,
           email,
-          password : passwordHash,
+          password: passwordHash,
           role: "ADMIN",
         },
       });
