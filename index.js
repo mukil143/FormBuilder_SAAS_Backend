@@ -23,7 +23,7 @@ import  externalApiRoutes from './src/v1/externalApiRoutes.js';
 import { startCronJobs } from './src/cron/resetUsage.js';
 // Initialize App
 const app = express();
-const PORT = 7001;
+const PORT = process.env.PORT || 7001;
 
 app.post('/api/webhook/razorpay', express.raw({ type: 'application/json' }), handleRazorpayWebhook); // Razorpay Webhook Route
 // Global Middleware Config
