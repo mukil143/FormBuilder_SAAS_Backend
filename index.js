@@ -1,5 +1,4 @@
-import dns from 'node:dns';
-dns.setDefaultResultOrder('ipv4first'); // Force IPv4 resolution to avoid potential issues with some libraries
+
 import express from 'express';
 import cors from 'cors';
 
