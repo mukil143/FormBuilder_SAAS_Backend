@@ -8,6 +8,7 @@ import crypto from "node:crypto";
 import { hashPassword, comparePassword } from "../utils/hashPassword.js";
 import { transporter } from "../utils/mailTransporter.js";
 import nodemailer from "nodemailer";
+import { sendEmail } from "../config/resend.js";
 
 const router = express.Router();
 
@@ -329,7 +330,7 @@ router.post("/forgot-password", async (req, res) => {
              <a href="${process.env.FRONTEND_URL}/reset-password?token=${resetToken}">Reset Password</a>
              <p>This link will expire in 1 hour.</p>`,
       };
-      const res = await transporter.sendMail(mailOptions);
+      const res = await sendEmail(mailOptions);
 
       console.log("Email sent: " + res.messageId);
       console.log("Preview URL: " + nodemailer.getTestMessageUrl(res));
