@@ -121,7 +121,7 @@ const handleAuthenticated = async (subData) => {
     const mailOptions = {
       to: user.email,
       subject: "Subscription Upgraded",
-      text: `Your subscription has been upgraded to ${planType}`,
+      html: `<p>Your subscription has been upgraded to ${planType}</p>`,
     };
     const res = await sendEmail(mailOptions);
     console.log("Email sent: " + res);
@@ -175,7 +175,7 @@ const handleCharged = async (subData, event) => {
         const mailOptions = {
           to: user.email,
           subject: "Subscription Renewed",
-          text: `Your subscription has been renewed`,
+          html: `<p>Your subscription has been renewed successfully.</p>`,
         };
         const res = await sendEmail(mailOptions);
         console.log("Email sent: " + res);
@@ -262,10 +262,7 @@ const handleCancelledOrHalted = async (subData, event) => {
         to: user.email,
         subject:
           status === "cancelled" ? "Subscription Cancelled" : "Payment Failed",
-        text:
-          status === "cancelled"
-            ? "Your subscription has been cancelled"
-            : "Payment failed. Please update your payment method.",
+        html: `<p>Your subscription has been ${status === "cancelled" ? "cancelled" : "halted due to payment failure"}.</p>`,
       };
 
       await sendEmail(mailOptions);
