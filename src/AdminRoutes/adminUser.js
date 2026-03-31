@@ -51,7 +51,7 @@ router.get(
 
         return {
           ...user,
-          status: isOnline ? "Active" : "Inactive",
+          status: isOnline ? "Online" : "Offline",
           lastSeen: user.lastActiveAt, // Optional: Return simpler timestamp
         };
       });

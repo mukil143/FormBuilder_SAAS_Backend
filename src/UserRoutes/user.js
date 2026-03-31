@@ -6,8 +6,6 @@ import { authLimiter } from "../Middleware/rateLimitMiddleware.js";
 import { trackActivity } from "../Middleware/activityMiddleware.js";
 import crypto from "node:crypto";
 import { hashPassword, comparePassword } from "../utils/hashPassword.js";
-import { transporter } from "../utils/mailTransporter.js";
-import nodemailer from "nodemailer";
 import { sendEmail } from "../config/resend.js";
 
 const router = express.Router();
@@ -323,7 +321,7 @@ router.post("/forgot-password", async (req, res) => {
     // Send email with reset link
     try {
       const mailOptions = {
-        from: "mukilanmukilan174@gmail.com",
+        from: "noreply@webzspot.com",
         to: email,
         subject: "Password Reset",
         html: `<p>You requested a password reset. Click the link below to reset your password:</p>
@@ -432,10 +430,9 @@ router.post("/reset-password/:token", async (req, res) => {
         subject: "Password Reset Confirmation",
         html: `<p>Your password has been reset successfully.</p>`,
       };
-      const res = await transporter.sendMail(mailOptions);
+      const res = await sendEmail(mailOptions);
 
-      console.log("Email sent: " + res.messageId);
-      console.log("Preview URL: " + nodemailer.getTestMessageUrl(res));
+      console.log("Email sent: " + res);
     } catch (err) {
       switch (err.code) {
         case "ECONNECTION":
@@ -525,9 +522,8 @@ router.post(
           subject: "Password Change Confirmation",
           html: `<p>Your password has been changed successfully.</p>`,
         };
-        const res = await transporter.sendMail(mailOptions);
-        console.log("Email sent: " + res.messageId);
-        console.log("Preview URL: " + nodemailer.getTestMessageUrl(res));
+        const res = await sendEmail(mailOptions);
+        console.log("Email sent: " + res);
       } catch (err) {
         switch (err.code) {
           case "ECONNECTION":

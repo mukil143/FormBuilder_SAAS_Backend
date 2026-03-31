@@ -1,9 +1,8 @@
 import crypto from "node:crypto";
-import nodemailer from "nodemailer";
 import { prisma } from "../config/db.js"; // Check if this path is correct for you
 import { PLAN_IDS } from "../config/razorpay.js";
+import { sendEmail } from "../config/resend.js";
 // Import the transporter from the new file
-import { transporter } from "../utils/mailTransporter.js";
 
 const getPlanTypeFromId = (razorpayPlanId) => {
   const planKey = Object.keys(PLAN_IDS).find(
@@ -117,32 +116,14 @@ const handleAuthenticated = async (subData) => {
 
   const user = await prisma.user.findUnique({ where: { userId } });
   if (!user) throw new Error("User not found");
-  try {
-    const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: user.email,
-      subject: "Subscription Upgraded",
-      text: `Your subscription has been upgraded to ${planType}`,
-    };
-    const res = await transporter.sendMail(mailOptions);
-    console.log("Email sent: " + res.messageId);
-    console.log("Preview URL: " + nodemailer.getTestMessageUrl(res));
-  } catch (err) {
-    switch (err.code) {
-      case "ECONNECTION":
-      case "ETIMEDOUT":
-        console.error("Network error - retry later:", err.message);
-        break;
-      case "EAUTH":
-        console.error("Authentication failed:", err.message);
-        break;
-      case "EENVELOPE":
-        console.error("Invalid recipients:", err.rejected);
-        break;
-      default:
-        console.error("Send failed:", err.message);
-    }
-  }
+  // ✅ Email
+  const mailOptions = {
+    to: user.email,
+    subject: "Subscription Upgraded",
+    text: `Your subscription has been upgraded to ${planType}`,
+  };
+  const res = await sendEmail(mailOptions);
+  console.log("Email sent: " + res);
 
   console.log(`✅ User ${userId} upgraded to ${planType}`);
   return "ok";
@@ -186,32 +167,13 @@ const handleCharged = async (subData, event) => {
     const user = await prisma.user.findUnique({ where: { userId } });
 
     if (user) {
-      try {
-        const mailOptions = {
-          from: process.env.EMAIL_USER,
-          to: user.email,
-          subject: "Subscription Renewed",
-          text: `Your subscription has been renewed`,
-        };
-        const res = await transporter.sendMail(mailOptions);
-        console.log("Email sent: " + res.messageId);
-        console.log("Preview URL: " + nodemailer.getTestMessageUrl(res));
-      } catch (err) {
-        switch (err.code) {
-          case "ECONNECTION":
-          case "ETIMEDOUT":
-            console.error("Network error - retry later:", err.message);
-            break;
-          case "EAUTH":
-            console.error("Authentication failed:", err.message);
-            break;
-          case "EENVELOPE":
-            console.error("Invalid recipients:", err.rejected);
-            break;
-          default:
-            console.error("Send failed:", err.message);
-        }
-      }
+      const mailOptions = {
+        to: user.email,
+        subject: "Subscription Renewed",
+        text: `Your subscription has been renewed`,
+      };
+      const res = await sendEmail(mailOptions);
+      console.log("Email sent: " + res);
     }
 
     console.log(`✅ Subscription renewed for ${id}`);
@@ -287,34 +249,18 @@ const handleCancelledOrHalted = async (subData, event) => {
     const user = await prisma.user.findUnique({ where: { userId } });
     if (!user) throw new Error("User not found");
     // ✅ Email
-    try {
-      const mailOptions = {
-        from: process.env.EMAIL_USER,
-        to: user.email,
-        subject:
-          status === "cancelled" ? "Subscription Cancelled" : "Payment Failed",
-        text:
-          status === "cancelled"
-            ? "Your subscription has been cancelled"
-            : "Payment failed. Please update your payment method.",
-      };
-      await transporter.sendMail(mailOptions);
-    } catch (err) {
-      switch (err.code) {
-        case "ECONNECTION":
-        case "ETIMEDOUT":
-          console.error("Network error - retry later:", err.message);
-          break;
-        case "EAUTH":
-          console.error("Authentication failed:", err.message);
-          break;
-        case "EENVELOPE":
-          console.error("Invalid recipients:", err.rejected);
-          break;
-        default:
-          console.error("Send failed:", err.message);
-      }
-    }
+
+    const mailOptions = {
+      to: user.email,
+      subject:
+        status === "cancelled" ? "Subscription Cancelled" : "Payment Failed",
+      text:
+        status === "cancelled"
+          ? "Your subscription has been cancelled"
+          : "Payment failed. Please update your payment method.",
+    };
+    await sendEmail(mailOptions);
+
     console.log(`✅ Subscription ${status} for ${userId}`);
     return "ok";
   } catch (error) {
