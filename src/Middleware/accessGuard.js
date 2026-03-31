@@ -83,7 +83,7 @@ export const checkAPIAccess = async (req, res, next) => {
     const {  plan } = req.user;
     const method = req.method; // GET, POST, etc.
     const apiAccessLevel = PLAN_LIMITS[plan].apiAccess;
-
+    
     if (apiAccessLevel === "NONE") {
       return res.status(403).json({
         success: false,

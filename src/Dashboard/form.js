@@ -4,6 +4,7 @@ import { checkAccountStatus, checkAPIAccess, checkFormList } from "../Middleware
 import { trackActivity } from "../Middleware/activityMiddleware.js";
 import { protect } from "../Middleware/authMiddleware.js";
 import { generateApiKeys } from "../utils/generateKeys.js";
+import { PLAN_LIMITS } from "../config/plans.js";
 const router = express.Router();
 
 const isEligibleForTheme = (plan) => {
@@ -682,9 +683,24 @@ router.post(
       const { userId } = req.user;
       const { name } = req.body; // e.g., "My E-commerce Site"
 
+      const user = await prisma.user.findUnique({ where: { userId } });
+
+      const keyLimit = PLAN_LIMITS[user.plan].apiKey;
+
+
       const existingKeys = await prisma.apiKey.findMany({
         where: { userId },
       });
+
+      if (existingKeys.length >= keyLimit) {
+        return res.status(400).json({
+          success: false,          message: `API Key limit reached for your plan. You can only have up to ${keyLimit} API keys. Please delete existing keys or upgrade your plan.`,
+        });
+      }
+
+
+
+
 
       if (existingKeys.length >= 5) {
         return res.status(400).json({
