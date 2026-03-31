@@ -117,13 +117,17 @@ const handleAuthenticated = async (subData) => {
   const user = await prisma.user.findUnique({ where: { userId } });
   if (!user) throw new Error("User not found");
   // ✅ Email
-  const mailOptions = {
-    to: user.email,
-    subject: "Subscription Upgraded",
-    text: `Your subscription has been upgraded to ${planType}`,
-  };
-  const res = await sendEmail(mailOptions);
-  console.log("Email sent: " + res);
+  try {
+    const mailOptions = {
+      to: user.email,
+      subject: "Subscription Upgraded",
+      text: `Your subscription has been upgraded to ${planType}`,
+    };
+    const res = await sendEmail(mailOptions);
+    console.log("Email sent: " + res);
+  } catch (error) {
+    console.error("Email Error:", error);
+  }
 
   console.log(`✅ User ${userId} upgraded to ${planType}`);
   return "ok";
@@ -167,13 +171,17 @@ const handleCharged = async (subData, event) => {
     const user = await prisma.user.findUnique({ where: { userId } });
 
     if (user) {
-      const mailOptions = {
-        to: user.email,
-        subject: "Subscription Renewed",
-        text: `Your subscription has been renewed`,
-      };
-      const res = await sendEmail(mailOptions);
-      console.log("Email sent: " + res);
+      try {
+        const mailOptions = {
+          to: user.email,
+          subject: "Subscription Renewed",
+          text: `Your subscription has been renewed`,
+        };
+        const res = await sendEmail(mailOptions);
+        console.log("Email sent: " + res);
+      } catch (error) {
+        console.error("Email Error:", error);
+      }
     }
 
     console.log(`✅ Subscription renewed for ${id}`);
@@ -249,19 +257,23 @@ const handleCancelledOrHalted = async (subData, event) => {
     const user = await prisma.user.findUnique({ where: { userId } });
     if (!user) throw new Error("User not found");
     // ✅ Email
+    try {
+      const mailOptions = {
+        to: user.email,
+        subject:
+          status === "cancelled" ? "Subscription Cancelled" : "Payment Failed",
+        text:
+          status === "cancelled"
+            ? "Your subscription has been cancelled"
+            : "Payment failed. Please update your payment method.",
+      };
 
-    const mailOptions = {
-      to: user.email,
-      subject:
-        status === "cancelled" ? "Subscription Cancelled" : "Payment Failed",
-      text:
-        status === "cancelled"
-          ? "Your subscription has been cancelled"
-          : "Payment failed. Please update your payment method.",
-    };
-    await sendEmail(mailOptions);
+      await sendEmail(mailOptions);
+      console.log(`✅ Subscription ${status} for ${userId}`);
+    } catch (error) {
+      console.error("Email Error:", error);
+    }
 
-    console.log(`✅ Subscription ${status} for ${userId}`);
     return "ok";
   } catch (error) {
     console.error("Cancel/Halt Error:", error);
