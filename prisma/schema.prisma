@@ -55,6 +55,12 @@ enum ReportStatus {
   REJECTED
 }
 
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+
 
 
 model User {
@@ -66,7 +72,7 @@ model User {
   createdAt DateTime @default(now())
   lastActiveAt DateTime @default(now())
   plan         PlanType @default(FREE)
-
+  AccountStatus  AccountStatus @default(ACTIVE) // For admin to deactivate/reactivate accounts
   //reset password token and expiry
   resetToken        String? @unique
   resetTokenExpiry  DateTime?
@@ -181,7 +187,7 @@ model Subscription {
   subscriptionId String   @id @default(uuid())
   userId         String
   plan           PlanType @default(FREE)
-  status         RazorpayStatus 
+  status         RazorpayStatus
   // For simplicity, we can store the start and end dates of the subscription in the database.
   startDate      DateTime @default(now())
   currentPeriodEnd     DateTime

@@ -7,6 +7,7 @@ import { trackActivity } from "../Middleware/activityMiddleware.js";
 import crypto from "node:crypto";
 import { hashPassword, comparePassword } from "../utils/hashPassword.js";
 import { sendEmail } from "../config/resend.js";
+import { checkAccountStatus } from "../Middleware/accessGuard.js";
 
 const router = express.Router();
 
@@ -87,6 +88,9 @@ router.post("/api/users/login", [authLimiter], async (req, res) => {
         role: true,
         createdAt: true,
         plan: true,
+        formCount: true,
+        monthlyResponseCount: true,
+        AccountStatus: true,
       },
     });
 
@@ -108,6 +112,15 @@ router.post("/api/users/login", [authLimiter], async (req, res) => {
       });
     }
 
+    // 🚨 3. THE ACCOUNT STATUS CHECK 🚨
+    if (user.AccountStatus === "SUSPENDED") {
+      return res.status(403).json({
+        success: false,
+        message: "Your account has been suspended. Please contact support.",
+        errorCode: "ACCOUNT_SUSPENDED", // Useful for the frontend UI
+      });
+    }
+
     user.password = undefined; // Remove password from user object
 
     const token = await generateToken(user);
@@ -124,7 +137,7 @@ router.post("/api/users/login", [authLimiter], async (req, res) => {
  * READ - Get User profile By ID
  * GET /users/:id
  */
-router.get("/api/users/profile", [protect, trackActivity], async (req, res) => {
+router.get("/api/users/profile", [protect,checkAccountStatus, trackActivity], async (req, res) => {
   try {
     const { userId } = req.user;
 
@@ -139,6 +152,8 @@ router.get("/api/users/profile", [protect, trackActivity], async (req, res) => {
         role: true,
         createdAt: true,
         plan: true,
+        formCount: true,
+        monthlyResponseCount: true,
       },
     });
 
@@ -167,7 +182,7 @@ router.get("/api/users/profile", [protect, trackActivity], async (req, res) => {
  */
 router.put(
   "/api/users/profile/update",
-  [protect, trackActivity],
+  [protect,checkAccountStatus, trackActivity],
   async (req, res) => {
     try {
       const { userId } = req.user;
@@ -471,7 +486,7 @@ router.post("/reset-password/:token", async (req, res) => {
  */
 router.post(
   "/api/users/change-password",
-  [protect, trackActivity],
+  [protect,checkAccountStatus, trackActivity],
   async (req, res) => {
     try {
       const { userId } = req.user;

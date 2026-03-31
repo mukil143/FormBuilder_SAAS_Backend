@@ -168,10 +168,9 @@ const handleCharged = async (subData, event) => {
       data: { monthlyResponseCount: 0 },
     });
 
-    const user = await prisma.user.findUnique({ where: { userId } });
+    const user = await prisma.user.findUnique({ where: { userId:userId } });
 
     if (user) {
-      try {
         const mailOptions = {
           to: user.email,
           subject: "Subscription Renewed",
@@ -179,9 +178,6 @@ const handleCharged = async (subData, event) => {
         };
         const res = await sendEmail(mailOptions);
         console.log("Email sent: " + res);
-      } catch (error) {
-        console.error("Email Error:", error);
-      }
     }
 
     console.log(`✅ Subscription renewed for ${id}`);
@@ -257,19 +253,16 @@ const handleCancelledOrHalted = async (subData, event) => {
     const user = await prisma.user.findUnique({ where: { userId } });
     if (!user) throw new Error("User not found");
     // ✅ Email
-    try {
-      const mailOptions = {
-        to: user.email,
-        subject:
-          status === "cancelled" ? "Subscription Cancelled" : "Payment Failed",
-        html: `<p>Your subscription has been ${status === "cancelled" ? "cancelled" : "halted due to payment failure"}.</p>`,
-      };
 
-      await sendEmail(mailOptions);
-      console.log(`✅ Subscription ${status} for ${userId}`);
-    } catch (error) {
-      console.error("Email Error:", error);
-    }
+    const mailOptions = {
+      to: user.email,
+      subject:
+        status === "cancelled" ? "Subscription Cancelled" : "Payment Failed",
+      html: `<p>Your subscription has been ${status === "cancelled" ? "cancelled" : "halted due to payment failure"}.</p>`,
+    };
+
+    await sendEmail(mailOptions);
+    console.log(`✅ Subscription ${status} for ${userId}`);
 
     return "ok";
   } catch (error) {

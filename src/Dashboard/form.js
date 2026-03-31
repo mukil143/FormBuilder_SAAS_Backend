@@ -1,6 +1,6 @@
 import express from "express";
 import { prisma } from "../config/db.js";
-import { checkAPIAccess, checkFormList } from "../Middleware/accessGuard.js";
+import { checkAccountStatus, checkAPIAccess, checkFormList } from "../Middleware/accessGuard.js";
 import { trackActivity } from "../Middleware/activityMiddleware.js";
 import { protect } from "../Middleware/authMiddleware.js";
 import { generateApiKeys } from "../utils/generateKeys.js";
@@ -16,7 +16,7 @@ const isEligibleForTheme = (plan) => {
 
 router.post(
   "/api/dashboard/form",
-  [protect, checkFormList, trackActivity],
+  [protect,checkAccountStatus, checkFormList, trackActivity],
   async (req, res) => {
     try {
       const { userId, role, plan } = req.user;
@@ -95,7 +95,7 @@ router.post(
 
 router.get(
   "/api/dashboard/forms",
-  [protect, trackActivity],
+  [protect, checkAccountStatus, trackActivity],
   async (req, res) => {
     try {
       const { userId } = req.user;

@@ -24,6 +24,10 @@ export const apiKeyAuth = async (req, res, next) => {
       return res.status(401).json({ success: false, message: "Invalid API Key" });
     }
 
+    if(keyRecord.user.AccountStatus === "SUSPENDED") {
+      return res.status(403).json({ success: false, message: "Account Suspended. Please contact support." });
+    }
+
     // 3. Validate the Secret Key (Compare raw input vs hashed DB value)
     const isMatch = await bcrypt.compare(secretKey, keyRecord.secret);
     if (!isMatch) {

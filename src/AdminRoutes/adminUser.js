@@ -4,6 +4,7 @@ import { admin, protect } from "../Middleware/authMiddleware.js";
 const router = express.Router();
 import { trackActivity } from "../Middleware/activityMiddleware.js";
 import { comparePassword, hashPassword } from "../utils/hashPassword.js";
+import { razorpay } from "../config/razorpay.js";
 /**
  * GET ALL USERS
  * GET /api/admin/users
@@ -26,6 +27,9 @@ router.get(
           plan: true,
           lastActiveAt: true, // 👈 Fetch the timestamp
           createdAt: true,
+          formCount: true,
+          monthlyResponseCount: true,
+          AccountStatus: true,
         },
         orderBy: { createdAt: "desc" },
       });
@@ -206,43 +210,43 @@ router.put(
   },
 );
 
-/**
- * Delete User
- * DELETE /api/admin/users/:id
- * Access Control: Admin
- */
-router.delete(
-  "/api/admin/users/:id",
-  [protect, trackActivity, admin],
-  async (req, res) => {
-    try {
-      const { id } = req.params;
-      const user = await prisma.user.delete({
-        where: {
-          userId: id,
-        },
-      });
+// /**
+//  * Delete User
+//  * DELETE /api/admin/users/:id
+//  * Access Control: Admin
+//  */
+// router.delete(
+//   "/api/admin/users/:id",
+//   [protect, trackActivity, admin],
+//   async (req, res) => {
+//     try {
+//       const { id } = req.params;
+//       const user = await prisma.user.delete({
+//         where: {
+//           userId: id,
+//         },
+//       });
 
-      if (user === null) {
-        return res.status(404).json({
-          success: false,
-          message: "User not found",
-        });
-      }
-      res.status(200).json({
-        success: true,
-        message: "User deleted successfully",
-      });
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({
-        success: false,
-        message: "Internal server error",
-        error: error.message,
-      });
-    }
-  },
-);
+//       if (user === null) {
+//         return res.status(404).json({
+//           success: false,
+//           message: "User not found",
+//         });
+//       }
+//       res.status(200).json({
+//         success: true,
+//         message: "User deleted successfully",
+//       });
+//     } catch (error) {
+//       console.error(error);
+//       res.status(500).json({
+//         success: false,
+//         message: "Internal server error",
+//         error: error.message,
+//       });
+//     }
+//   },
+// );
 
 /**
  * GET USER BY ID
@@ -266,6 +270,10 @@ router.get(
           email: true,
           role: true,
           createdAt: true,
+          plan: true,
+          formCount: true,
+          monthlyResponseCount: true,
+          AccountStatus: true,
           form: {
             select: {
               formId: true,
@@ -658,6 +666,99 @@ router.delete(
     } catch (error) {
       console.error(error);
       return res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  },
+);
+
+/**
+ * update the account status of a user (suspend/reactivate)
+ * PATCH /api/admin/users/:userId/status
+ * Access Control: Admin
+ */
+router.patch(
+  "/api/admin/users/:userId/status",
+  [protect, trackActivity, admin],
+  async (req, res) => {
+    try {
+      const { userId } = req.params; // The ID in the URL
+      const { status } = req.body; // "ACTIVE" or "SUSPENDED"
+
+      // 1. Validate the input
+      if (!["ACTIVE", "SUSPENDED"].includes(status)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid status. Must be ACTIVE or SUSPENDED.",
+        });
+      }
+
+      // 2. Prevent the admin from accidentally suspending themselves
+      if (req.user.userId === userId) {
+        return res.status(400).json({
+          success: false,
+          message: "You cannot change your own account status.",
+        });
+      }
+
+      // 3. Find the user first to make sure they exist
+      const user = await prisma.user.findUnique({
+        where: { userId: userId },
+        select: {
+          userId: true,
+          email: true,
+          AccountStatus: true,
+          subscriptions: {
+            where: { status: "active" },
+            select: { razorpaySubscriptionId: true },
+          },
+        },
+      });
+
+      if (!user) {
+        return res
+          .status(404)
+          .json({ success: false, message: "User not found." });
+      }
+
+      if(user.AccountStatus === status) {
+        return res.status(400).json({
+          success: false,
+          message: `User is already ${status}.`,
+        });
+      }
+
+      // 4. Update the user's status in the database
+      const updatedUser = await prisma.user.update({
+        where: { userId: userId },
+        data: { AccountStatus: status },
+      });
+
+      // 5. Optional: If suspending, you might want to automatically cancel their active Razorpay subscription here
+
+      console.log("razorpay subs:", user.subscriptions);
+
+      if (status === "SUSPENDED" && user.subscriptions.length > 0) {
+        await razorpay.subscriptions.cancel(
+          user.subscriptions[0].razorpaySubscriptionId,
+          false,
+        );
+      }
+
+      res.status(200).json({
+        success: true,
+        message: `User ${updatedUser.email} has been successfully marked as ${status}.`,
+        data: {
+          userId: updatedUser.userId,
+          email: updatedUser.email,
+          status: updatedUser.AccountStatus,
+        },
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({
         success: false,
         message: "Internal server error",
         error: error.message,
