@@ -1,6 +1,5 @@
 import express from "express";
 import { prisma } from "../config/db.js"; // Adjust path
-import { checkAPIAccess } from "../Middleware/accessGuard.js";
 import { apiKeyAuth } from "../Middleware/apiAuthkey.js";
 
 const router = express.Router();

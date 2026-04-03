@@ -26,17 +26,17 @@ export const startCronJobs = () => {
     },
   );
 
-  // cron.schedule("0 0 * * *", async () => {
-  //   console.log("⏳ [CRON] Daily reset...");
+  cron.schedule("0 0 * * *", async () => {
+    console.log("⏳ [CRON] Daily reset...");
 
-  //   await prisma.user.updateMany({
-  //     data: {
-  //       dailyResponseCount: 0,
-  //     },
-  //   });
+    await prisma.user.updateMany({
+      data: {
+        dailyResponseCount: 0,
+      },
+    });
 
-  //   console.log("✅ Daily reset done");
-  // });
+    console.log("✅ Daily reset done");
+  });
 
   console.log("🕒 Cron Jobs initialized.");
 };
