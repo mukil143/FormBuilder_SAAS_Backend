@@ -25,14 +25,16 @@ export const protect = async (req, res, next) => {
           email: true,
           role: true,
           createdAt: true,
-          plan: true,
-          subscriptions: {
-            where: { status: "active" },
-            take: 1,
-            orderBy: { createdAt: "desc" },
-          },
+          formCount: true,
+          monthlyResponseCount: true,
+          AccountStatus: true,
+          razorpayCustomerId: true,
+          dailyResponseCount: true,
+          teamSize: true,
+          apiKeyCount: true,
         },
       });
+
 
       if (req.user === null || req.user === undefined || req.user === "") {
         return res.status(401).json({ message: "Not authorized" });

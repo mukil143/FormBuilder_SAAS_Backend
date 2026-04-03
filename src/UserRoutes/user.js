@@ -17,32 +17,42 @@ const router = express.Router();
  */
 router.post("/api/users/register", [authLimiter], async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    let { name, email, password } = req.body;
+
+    // 🔥 1. Validation
     if (!name || !email || !password) {
-      return res
-        .status(400)
-        .json({ message: "Name, email, and password are required" });
+      return res.status(400).json({
+        message: "Name, email, and password are required",
+      });
     }
 
+    name = name.trim();
+    email = email.toLowerCase().trim();
+
     if (password.length < 6) {
-      return res
-        .status(400)
-        .json({ message: "Password must be at least 6 characters" });
+      return res.status(400).json({
+        message: "Password must be at least 6 characters",
+      });
     }
+
+    // 🔥 2. Check existing user
     const existingUser = await prisma.user.findUnique({
-      where: { email: email.toLowerCase() },
+      where: { email },
     });
 
     if (existingUser) {
-      return res.status(400).json({ message: "User already exists" });
+      return res.status(400).json({
+        message: "User already exists",
+      });
     }
 
     const hashedPassword = await hashPassword(password);
 
+    // 🔥 3. Create user
     const user = await prisma.user.create({
       data: {
         name,
-        email: email.toLowerCase(),
+        email,
         password: hashedPassword,
         role: "USER",
         razorpayCustomerId: null,
@@ -56,10 +66,28 @@ router.post("/api/users/register", [authLimiter], async (req, res) => {
       },
     });
 
-    res.status(201).json({ message: "User created successfully", user });
+    // 🔥 4. Get FREE plan (IMPORTANT)
+    const freePlan = await prisma.plan.findFirst({
+      where: {
+        planType: "FREE",
+        isActive: true,
+      },
+    });
+
+    return res.status(201).json({
+      message: "User created successfully",
+      user, // optional (remove if not needed)
+      plan: {
+        planType: freePlan?.planType || "FREE",
+        name: freePlan?.name || "Free Plan",
+      },
+    });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({
+      message: "Internal server error",
+      error: error.message,
+    });
   }
 });
 
@@ -73,13 +101,14 @@ router.post("/api/users/login", [authLimiter], async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: "Email and password are required" });
+      return res.status(400).json({
+        message: "Email and password are required",
+      });
     }
 
+    // 🔥 1. Find user
     const user = await prisma.user.findUnique({
-      where: { email },
+      where: { email: email.toLowerCase() },
       select: {
         userId: true,
         name: true,
@@ -87,23 +116,18 @@ router.post("/api/users/login", [authLimiter], async (req, res) => {
         password: true,
         role: true,
         createdAt: true,
-        plan: true,
-        formCount: true,
         monthlyResponseCount: true,
-        AccountStatus: true,
+        AccountStatus: true, // ✅ fixed
       },
     });
 
     if (!user) {
-      return res.status(404).json({ message: "User  not found" });
-    }
-
-    if (user.email !== email.toLowerCase()) {
-      return res.status(401).json({
-        message: "Email not found",
+      return res.status(404).json({
+        message: "User not found",
       });
     }
 
+    // 🔥 2. Check password
     const isMatch = await comparePassword(password, user.password);
 
     if (!isMatch) {
@@ -112,64 +136,69 @@ router.post("/api/users/login", [authLimiter], async (req, res) => {
       });
     }
 
-    // 🚨 3. THE ACCOUNT STATUS CHECK 🚨
-    if (user.AccountStatus === "SUSPENDED") {
+    // 🚨 3. Account status check
+    if (user.accountStatus === "SUSPENDED") {
       return res.status(403).json({
         success: false,
-        message: "Your account has been suspended. Please contact support.",
-        errorCode: "ACCOUNT_SUSPENDED", // Useful for the frontend UI
+        message: "Your account has been suspended.",
+        errorCode: "ACCOUNT_SUSPENDED",
       });
     }
 
-    user.password = undefined; // Remove password from user object
-
-    const token = await generateToken(user);
-    return res.status(200).json({ message: "Login successful", user, token });
-  } catch (error) {
-    console.error(error);
-    return res
-      .status(500)
-      .json({ message: "Internal server ", error: error.message });
-  }
-});
-
-/**
- * READ - Get User profile By ID
- * GET /users/:id
- */
-router.get("/api/users/profile", [protect,checkAccountStatus, trackActivity], async (req, res) => {
-  try {
-    const { userId } = req.user;
-
-    const user = await prisma.user.findUnique({
-      where: {
-        userId: userId,
-      },
-      select: {
-        userId: true,
-        name: true,
-        email: true,
-        role: true,
-        createdAt: true,
-        plan: true,
-        formCount: true,
-        monthlyResponseCount: true,
-      },
-    });
-
-    if (user === null || user === undefined || !user) {
-      return res.status(404).json({ message: "User not found" });
+    if (user.accountStatus === "DEACTIVATED") {
+      return res.status(403).json({
+        success: false,
+        message: "Your account is deactivated.",
+        errorCode: "ACCOUNT_DEACTIVATED",
+      });
     }
 
-    res.status(200).json({
-      success: true,
-      message: "User profile fetched successfully",
-      data: user,
+    // 🔥 4. Get active subscription
+    const subscription = await prisma.subscription.findFirst({
+      where: {
+        userId: user.userId,
+        status: "active",
+      },
+      include: {
+        planDetails: true,
+      },
+    });
+
+    let plan;
+
+    if (subscription) {
+      plan = subscription.planDetails;
+    } else {
+      // ✅ FREE fallback
+      plan = await prisma.plan.findFirst({
+        where: {
+          planType: "FREE",
+          isActive: true,
+        },
+      });
+    }
+
+    // 🔥 5. Generate token
+    const token = await generateToken({
+      userId: user.userId,
+      role: user.role,
+    });
+
+    // 🔥 6. Remove password
+    user.password = undefined;
+
+    return res.status(200).json({
+      message: "Login successful",
+      user,
+      token,
+      plan: {
+        planType: plan?.planType || "FREE",
+        name: plan?.name || "Free Plan",
+      },
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({
-      success: false,
+    return res.status(500).json({
       message: "Internal server error",
       error: error.message,
     });
@@ -177,26 +206,146 @@ router.get("/api/users/profile", [protect,checkAccountStatus, trackActivity], as
 });
 
 /**
+ * READ - Get User profile By ID
+ * GET /users/:id
+ */
+router.get(
+  "/api/users/profile",
+  [protect, checkAccountStatus, trackActivity],
+  async (req, res) => {
+    try {
+      const { userId } = req.user;
+
+      // 🔥 1. Get user
+      const user = await prisma.user.findUnique({
+        where: { userId },
+        select: {
+          userId: true,
+          name: true,
+          email: true,
+          role: true,
+          createdAt: true,
+          formCount: true,
+          monthlyResponseCount: true,
+          dailyResponseCount: true, // ✅ add this
+        },
+      });
+
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // 🔥 2. Get subscription + plan
+      const subscription = await prisma.subscription.findFirst({
+        where: {
+          userId,
+          status: "active",
+        },
+        include: {
+          planDetails: true,
+        },
+      });
+
+      let plan;
+
+      if (subscription) {
+        plan = subscription.planDetails;
+      } else {
+        plan = await prisma.plan.findFirst({
+          where: { planType: "FREE", isActive: true },
+        });
+      }
+
+      // 🔥 3. Calculate remaining limits
+      const limits = {
+        monthly: {
+          used: user.monthlyResponseCount,
+          limit: plan?.monthlyResponseLimit ?? 0,
+          remaining: Math.max(
+            (plan?.monthlyResponseLimit ?? 0) - user.monthlyResponseCount,
+            0,
+          ),
+        },
+        daily: {
+          used: user.dailyResponseCount,
+          limit: plan?.dailyResponseLimit ?? 0,
+          remaining: Math.max(
+            (plan?.dailyResponseLimit ?? 0) - user.dailyResponseCount,
+            0,
+          ),
+        },
+        forms: {
+          used: user.formCount,
+          limit: plan?.activeFormLimit ?? 0,
+          remaining: Math.max((plan?.activeFormLimit ?? 0) - user.formCount, 0),
+        },
+        apiKeys: {
+          limit: plan?.apiKeyLimit ?? 0,
+        },
+        users: {
+          limit: plan?.userLimit ?? 0,
+        },
+      };
+
+      return res.status(200).json({
+        success: true,
+        message: "User profile fetched successfully",
+        data: {
+          ...user,
+          plan: {
+            planType: plan?.planType || "FREE",
+            name: plan?.name || "Free Plan",
+          },
+          limits, // 🔥 NEW FIELD
+        },
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
+    }
+  },
+);
+
+/**
  * UPDATE - Update User
  * PUT /users/:id
  */
 router.put(
   "/api/users/profile/update",
-  [protect,checkAccountStatus, trackActivity],
+  [protect, checkAccountStatus, trackActivity],
   async (req, res) => {
     try {
       const { userId } = req.user;
-      const { name, email } = req.body;
+      let { name, email } = req.body;
+
+      const data = {};
+
+      if (name) data.name = name.trim();
+
+      if (email) {
+        email = email.toLowerCase().trim();
+
+        const existing = await prisma.user.findUnique({
+          where: { email },
+        });
+
+        if (existing && existing.userId !== userId) {
+          return res.status(400).json({
+            success: false,
+            message: "Email already in use",
+          });
+        }
+
+        data.email = email;
+      }
 
       const user = await prisma.user.update({
-        where: {
-          userId: userId,
-        },
-
-        data: {
-          name,
-          email,
-        },
+        where: { userId },
+        data,
         select: {
           userId: true,
           name: true,
@@ -206,11 +355,7 @@ router.put(
         },
       });
 
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      res.status(200).json({
+      return res.status(200).json({
         success: true,
         message: "User updated successfully",
         data: user,
@@ -225,7 +370,6 @@ router.put(
     }
   },
 );
-
 /**
  * DELETE - Delete User
  * DELETE /users/:id
@@ -239,58 +383,65 @@ router.delete(
       const { password } = req.body;
 
       if (!password) {
-        return res
-          .status(400)
-          .json({ success: false, message: "Password is required" });
-      }
-
-      if (password.length < 6) {
         return res.status(400).json({
           success: false,
-          message: "Password must be at least 6 characters",
+          message: "Password is required",
         });
       }
 
       const user = await prisma.user.findUnique({
-        where: {
-          userId: userId,
-        },
+        where: { userId },
         select: {
           password: true,
-          userId: true,
         },
       });
 
       if (!user) {
-        return res
-          .status(404)
-          .json({ success: false, message: "User not found" });
-      }
-
-      if (user.userId !== userId) {
-        return res
-          .status(401)
-          .json({ success: false, message: "Not authorized" });
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
       }
 
       const isMatch = await comparePassword(password, user.password);
 
       if (!isMatch) {
-        return res
-          .status(401)
-          .json({ success: false, message: "Invalid password" });
+        return res.status(401).json({
+          success: false,
+          message: "Invalid password",
+        });
       }
 
-      await prisma.user.delete({
+      // 🔥 Optional: cancel active subscription
+      const sub = await prisma.subscription.findFirst({
         where: {
-          userId: userId,
+          userId,
+          status: "active",
         },
       });
 
-      res
-        .status(200)
-        .json({ success: true, message: "User deleted successfully" });
+      if (sub) {
+        try {
+          await razorpay.subscriptions.cancel(
+            sub.razorpaySubscriptionId,
+            false,
+          );
+        } catch (err) {
+          console.error("Razorpay cancel failed:", err);
+        }
+      }
+
+      // 🔥 Delete user (cascade will handle relations)
+      await prisma.user.delete({
+        where: { userId },
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "User deleted successfully",
+      });
     } catch (error) {
+      console.error(error);
       res.status(500).json({
         success: false,
         message: "Internal server error",
@@ -486,7 +637,7 @@ router.post("/reset-password/:token", async (req, res) => {
  */
 router.post(
   "/api/users/change-password",
-  [protect,checkAccountStatus, trackActivity],
+  [protect, checkAccountStatus, trackActivity],
   async (req, res) => {
     try {
       const { userId } = req.user;
@@ -570,5 +721,34 @@ router.post(
     }
   },
 );
+
+/**
+ * GET all plans - GET /api/plans
+ * Access Control: Public
+ */
+router.get("/api/plans", async (req, res) => {
+  try {
+    const plans = await prisma.plan.findMany({
+      where: {
+        isActive: true,
+      },
+    });
+    plans.forEach((plan) => {
+      plan.amount = plan.amount / 100;
+    });
+    res.status(200).json({
+      success: true,
+      message: "Plans fetched successfully",
+      data: plans,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
+});
 
 export default router;

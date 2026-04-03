@@ -1,15 +1,13 @@
 import express from "express";
 import { prisma } from "../config/db.js";
-import { checkAccountStatus, checkAPIAccess, checkFormList } from "../Middleware/accessGuard.js";
+import { checkAccountStatus } from "../Middleware/accessGuard.js";
 import { trackActivity } from "../Middleware/activityMiddleware.js";
 import { protect } from "../Middleware/authMiddleware.js";
 import { generateApiKeys } from "../utils/generateKeys.js";
-import { PLAN_LIMITS } from "../config/plans.js";
+import { attachPlan } from "../Middleware/attachPlan.js";
+import { checkLimit } from "../Middleware/checkLimit.js";
 const router = express.Router();
 
-const isEligibleForTheme = (plan) => {
-  return plan !== "FREE";
-};
 
 /**
  * CREATE FORM
@@ -17,11 +15,12 @@ const isEligibleForTheme = (plan) => {
 
 router.post(
   "/api/dashboard/form",
-  [protect,checkAccountStatus, checkFormList, trackActivity],
+  [protect,checkAccountStatus, attachPlan, checkLimit("FORM_CREATE"), trackActivity],
   async (req, res) => {
     try {
-      const { userId, role, plan } = req.user;
-      const { title, description, isPublic, fields, theme } = req.body;
+      const { userId, role } = req.user;
+      const { themeAccess } = req.plan;
+      const { title, description, fields, theme } = req.body;
 
       if (role === "ADMIN") {
         return res.status(403).json({
@@ -42,12 +41,14 @@ router.post(
         .replaceAll(/[^a-z0-9]+/g, "-")
         .replaceAll(/(^-|-$)/g, "");
 
+
+
       const form = await prisma.form.create({
         data: {
           title,
           description,
           slug,
-          isPublic: isPublic ?? false,
+          isPublic: true,
           userId,
           sharedUrl: `${process.env.FRONTEND_URL}public/form/${slug}`,
           formField: {
@@ -60,12 +61,30 @@ router.post(
               masterFieldId: field.masterFieldId || null,
             })),
           },
-          theme: isEligibleForTheme(plan) ? theme : {},
+          theme: themeAccess ? theme : {},
         },
         include: {
           formField: true,
         },
       });
+
+      if (!form) {
+        return res.status(500).json({
+          success: false,
+          message: "Form creation failed",
+        });
+      }
+
+      const updateFormcount = await prisma.user.update({
+        where: { userId },
+        data: {
+          formCount: {
+            increment: 1,
+          }
+        },
+      });
+
+
 
       return res.status(201).json({
         success: true,
@@ -183,8 +202,8 @@ router.put(
 
       const slug = title
         .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)/g, "");
+        .replaceAll(/[^a-z0-9]+/g, "-")
+        .replaceAll(/(^-|-$)/g, "");
 
       // 1. Prepare Transaction
       const transactionOperations = [];
@@ -322,7 +341,7 @@ router.put(
  */
 router.get(
   "/api/dashboard/form/details/:formId",
-  [protect, trackActivity],
+  [protect,checkAccountStatus, trackActivity],
   async (req, res) => {
     try {
       const { userId } = req.user;
@@ -368,7 +387,7 @@ router.get(
 
 router.delete(
   "/api/dashboard/form/:formId",
-  [protect, trackActivity],
+  [protect,checkAccountStatus, trackActivity],
   async (req, res) => {
     try {
       const { formId } = req.params;
@@ -408,7 +427,7 @@ router.delete(
  */
 router.get(
   "/api/dashboard/form/responses/:formId",
-  [protect, trackActivity],
+  [protect,checkAccountStatus, trackActivity],
   async (req, res) => {
     try {
       const { formId } = req.params;
@@ -497,118 +516,6 @@ router.get(
   },
 );
 
-/**
- * Get single Form submitted response by responseId
- * GET /api/dashboard/form/response/:responseId
- */
-// router.get(
-//   "/api/dashboard/form/response/:responseId",
-//   [protect, trackActivity],
-//   async (req, res) => {
-//     try {
-//       const { userId } = req.user;
-//       const { responseId } = req.params;
-
-//       if (!responseId) {
-//         return res.status(400).json({ message: "responseId is required" });
-//       }
-//       const response = await prisma.formResponse.findUnique({
-//         where: { formResponseId: responseId },
-//         include: {
-//           form: {
-//             select: {
-//               userId: true,
-//               title: true,
-//             },
-//           },
-//           responseValue: {
-//             include: {
-//               formField: {
-//                 select: {
-//                   label: true,
-//                   type: true,
-//                   options: true,
-//                   order: true,
-//                   required: true,
-//                   masterFieldId: true,
-//                 },
-//               },
-//             },
-//             orderBy: {
-//               formField: {
-//                 order: "asc",
-//               },
-//             },
-//           },
-//         },
-//       });
-
-//       if (response === null || response === undefined) {
-//         return res.status(404).json({ message: "Form response not found" });
-//       }
-
-//       if (response.form.userId !== userId) {
-//         return res.status(401).json({ message: "Not authorized" });
-//       }
-//       return res.status(200).json({
-//         success: true,
-//         data: response,
-//       });
-//     } catch (error) {
-//       console.error(error);
-//       return res.status(500).json({
-//         success: false,
-//         message: "Internal server error",
-//         error: error.message,
-//       });
-//     }
-//   },
-// );
-
-/**
- * Get Form Statistics by formId
- * GET /api/dashboard/form/stats/:formId
- *
- */
-// router.get(
-//   "/api/dashboard/form/stats/:formId",
-//   [protect, trackActivity],
-//   async (req, res) => {
-//     try {
-//       const { userId } = req.user;
-//       const { formId } = req.params;
-
-//       if (!formId) {
-//         return res.status(400).json({ message: "formId is required" });
-//       }
-
-//       const form = await prisma.form.findUnique({
-//         where: { formId: formId },
-//         include: { formResponse: true },
-//       });
-
-//       if (form === null || form === undefined) {
-//         return res.status(404).json({ message: "Form not found" });
-//       } else if (form.userId !== userId) {
-//         return res.status(401).json({ message: "Not authorized" });
-//       }
-
-//       return res.status(200).json({
-//         success: true,
-//         data: {
-//           totalResponses: form.formResponse.length,
-//         },
-//       });
-//     } catch (error) {
-//       console.error(error);
-//       return res.status(500).json({
-//         success: false,
-//         message: "Internal server error",
-//         error: error.message,
-//       });
-//     }
-//   }
-// );
 
 /**
  * Update Form Theme
@@ -618,10 +525,10 @@ router.get(
  */
 router.put(
   "/api/dashboard/form/theme/:formId",
-  [protect, trackActivity],
+  [protect, checkAccountStatus,attachPlan,checkLimit("THEME"), trackActivity],
   async (req, res) => {
     try {
-      const { userId, plan} = req.user;
+      const { userId } = req.user;
       const { formId } = req.params;
       const { theme } = req.body;
       if (!formId) {
@@ -645,7 +552,7 @@ router.put(
       const updatedForm = await prisma.form.update({
         where: { formId },
         data: {
-          theme: isEligibleForTheme(plan) ? theme : {},
+          theme: theme,
         },
       });
       if (updatedForm) {
@@ -677,75 +584,78 @@ router.put(
  */
 router.post(
   "/api/dashboard/keys",
-  [protect, checkAPIAccess],
+  [
+    protect,
+    checkAccountStatus,
+    attachPlan,
+    checkLimit("API_KEY"),
+    trackActivity,
+  ],
   async (req, res) => {
     try {
       const { userId } = req.user;
-      const { name } = req.body; // e.g., "My E-commerce Site"
+      const { name } = req.body;
 
-      const user = await prisma.user.findUnique({ where: { userId } });
+      const keyName = (name || "Default Key").trim();
 
-      const keyLimit = PLAN_LIMITS[user.plan].apiKey;
+      // 🔥 1. Check duplicate name (optimized)
+      const existingKey = await prisma.apiKey.findFirst({
+        where: {
+          userId,
+          name: keyName,
+        },
+      });
 
+      if (existingKey) {
+        return res.status(400).json({
+          success: false,
+          message: `Key "${keyName}" already exists`,
+        });
+      }
 
-      const existingKeys = await prisma.apiKey.findMany({
+      // 🔥 2. Get plan (already attached by middleware)
+      const plan = req.plan;
+
+      // 🔥 3. Count existing keys
+      const keyCount = await prisma.apiKey.count({
         where: { userId },
       });
 
-      if (existingKeys.length >= keyLimit) {
-        return res.status(400).json({
-          success: false,          message: `API Key limit reached for your plan. You can only have up to ${keyLimit} API keys. Please delete existing keys or upgrade your plan.`,
-        });
-      }
-
-
-
-
-
-      if (existingKeys.length >= 5) {
-        return res.status(400).json({
+      // 🔥 4. Enforce limit (double safety)
+      if (plan.apiKeyLimit > 0 && keyCount >= plan.apiKeyLimit) {
+        return res.status(403).json({
           success: false,
-          message: "API Key limit reached. Maximum 5 keys allowed per user.",
+          message: "API key limit reached for your plan",
         });
       }
 
-      const keyName = name || "Default Key";
-      const nameExists = existingKeys.some((k) => k.name === keyName);
-      if (nameExists) {
-        return res.status(400).json({
-          success: false,
-          message: `You already have a key named "${keyName}". Please choose a different name.`,
-        });
-      }
-
-      // 1. Generate keys
+      // 🔥 5. Generate keys
       const { rawKey, rawSecret, hashedSecret } = await generateApiKeys();
 
-      // 2. Save public key + hashed secret to DB
+      // 🔥 6. Store in DB
       await prisma.apiKey.create({
         data: {
           userId,
           key: rawKey,
           secret: hashedSecret,
-          name: keyName || "Default Key",
+          name: keyName,
         },
       });
 
-      // 3. Return RAW keys to user (Critical: This is the only time they see the secret)
-      res.status(201).json({
+      return res.status(201).json({
         success: true,
-        message:
-          "API Key generated successfully Store the secret key securely! You won't be able to see it again.",
+        message: "API Key generated successfully. Save the secret securely!",
         data: {
           publicKey: rawKey,
-          secretKey: rawSecret, // ⚠️ Warn user to copy this now!
+          secretKey: rawSecret, // ⚠️ show only once
         },
       });
     } catch (error) {
       console.error(error);
-      res
-        .status(500)
-        .json({ success: false, message: "Failed to generate keys" });
+      return res.status(500).json({
+        success: false,
+        message: "Failed to generate API keys",
+      });
     }
   },
 );
@@ -754,7 +664,7 @@ router.post(
  * Get API Keys for the logged-in user
  * GET /api/dashboard/keys
  */
-router.get("/api/dashboard/keys", [protect], async (req, res) => {
+router.get("/api/dashboard/keys", [protect,checkAccountStatus,trackActivity], async (req, res) => {
   try {
     const { userId } = req.user;
 

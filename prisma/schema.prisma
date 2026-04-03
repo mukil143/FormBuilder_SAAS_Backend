@@ -14,10 +14,16 @@ datasource db {
 
 }
 
+
 enum PlanType {
   FREE
   PRO
   BUSINESS
+}
+
+enum BillingPeriod {
+  monthly
+  yearly
 }
 
 enum RazorpayStatus {
@@ -71,15 +77,18 @@ model User {
   role      Role     @default(USER)
   createdAt DateTime @default(now())
   lastActiveAt DateTime @default(now())
-  plan         PlanType @default(FREE)
   AccountStatus  AccountStatus @default(ACTIVE) // For admin to deactivate/reactivate accounts
   //reset password token and expiry
   resetToken        String? @unique
   resetTokenExpiry  DateTime?
   // Usage metrics
   formCount Int @default(0)
-  // e.g., number of form responses submitted in the current month
   monthlyResponseCount Int @default(0)
+  dailyResponseCount Int @default(0)
+  teamSize Int @default(1)
+  apiKeyCount Int @default(0)
+ // For future team features
+  // For Razorpay integration
   razorpayCustomerId   String?  @unique
   //-- Relations
   form         Form[]
@@ -186,16 +195,64 @@ model ApiKey {
 model Subscription {
   subscriptionId String   @id @default(uuid())
   userId         String
-  plan           PlanType @default(FREE)
+  planId         String
+
   status         RazorpayStatus
-  // For simplicity, we can store the start and end dates of the subscription in the database.
+
   startDate      DateTime @default(now())
-  currentPeriodEnd     DateTime
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
-  isActive       Boolean  @default(true)
-  razorpaySubscriptionId String       @unique
-  user           User     @relation(fields: [userId], references: [userId],onDelete: Cascade)
+  currentPeriodEnd DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  razorpaySubscriptionId String @unique
+
+  user        User @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  planDetails Plan @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([userId, status])
 }
 
+// 1. Global Settings (For storing the Admin's Razorpay Keys)
+model PlatformSetting {
+  id                String   @id @default(uuid())
+  razorpayKeyId     String?
+  razorpayKeySecret String?
+  razorpayWebhookSecret String?
+  createdAt         DateTime @default(now())
+ // This will still be encrypted!
+  updatedAt         DateTime @updatedAt
+}
 
+// 2. The SaaS Subscription Plans
+model Plan {
+  id                String   @id @default(uuid())
+
+  planType          String   // PRO, BUSINESS
+  razorpayPlanId    String?   @unique
+
+  name              String
+  description       String?
+
+  amount            Int      // in paise
+  currency          String   @default("INR")
+
+  period            BillingPeriod
+  interval          Int      @default(1)
+
+  isActive          Boolean  @default(true)
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  monthlyResponseLimit Int @default(0)
+  dailyResponseLimit   Int @default(0)
+  activeFormLimit      Int @default(0)
+  apiKeyLimit          Int @default(0)
+  userLimit            Int @default(0)
+  themeAccess          Boolean @default(false)
+
+  subscriptions Subscription[]
+
+  @@unique([planType, period])
+  @@index([planType])
+}

@@ -49,25 +49,27 @@ router.get("/api/public/form/:slug", async (req, res) => {
  * Body: { responses: [...] }
  * Responses is an array of objects with fieldId and value
  */
-
 router.post(
   "/api/public/form/submit/:slug",
-  [formSubmitLimiter, checkResponseLimit],
+  [formSubmitLimiter],
   async (req, res) => {
     try {
       const { slug } = req.params;
       const { responses } = req.body;
+
       if (!responses || !Array.isArray(responses)) {
-        return res
-          .status(400)
-          .json({ success: false, message: "Invalid responses" });
+        return res.status(400).json({
+          success: false,
+          message: "Invalid responses",
+        });
       }
 
-      // Find form by slug
+      // ✅ 1. Get form
       const form = await prisma.form.findUnique({
-        where: { slug: slug },
+        where: { slug },
       });
-      if (form === null || form === undefined) {
+
+      if (!form) {
         return res.status(404).json({ message: "Form not found" });
       }
 
@@ -75,14 +77,79 @@ router.post(
         return res.status(403).json({ message: "Form is not public" });
       }
 
-      // Create form response
+      const userId = form.userId;
+
+      // ✅ 2. Get user's active subscription
+      const subscription = await prisma.subscription.findFirst({
+        where: {
+          userId,
+          status: "active",
+        },
+        include: {
+          planDetails: true,
+        },
+      });
+
+      let plan;
+
+      if (subscription) {
+        plan = subscription.planDetails;
+      } else {
+        // ✅ FREE fallback
+        plan = await prisma.plan.findFirst({
+          where: {
+            planType: "FREE",
+            isActive: true,
+          },
+        });
+      }
+
+      if (!plan) {
+        return res.status(500).json({
+          success: false,
+          message: "Plan not configured",
+        });
+      }
+
+      // ✅ 3. Get user usage
+      const user = await prisma.user.findUnique({
+        where: { userId },
+        select: {
+          monthlyResponseCount: true,
+          dailyResponseCount: true,
+        },
+      });
+
+      // ✅ 4. CHECK LIMITS (🔥 CORE LOGIC)
+
+      if (
+        plan.monthlyResponseLimit > 0 &&
+        user.monthlyResponseCount >= plan.monthlyResponseLimit
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "Monthly response limit exceeded",
+        });
+      }
+
+      if (
+        plan.dailyResponseLimit > 0 &&
+        user.dailyResponseCount >= plan.dailyResponseLimit
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "Daily response limit exceeded",
+        });
+      }
+
+      // ✅ 5. Save submission
       const submission = await prisma.formResponse.create({
         data: {
           formId: form.formId,
           responseValue: {
             create: responses.map((response) => ({
               formFieldId: response.formFieldId,
-              value: response.value ? response.value : "",
+              value: response.value || "",
             })),
           },
         },
@@ -91,12 +158,12 @@ router.post(
         },
       });
 
+      // ✅ 6. Increment usage
       await prisma.user.update({
-        where: { userId: form.userId },
+        where: { userId },
         data: {
-          monthlyResponseCount: {
-            increment: 1,
-          },
+          monthlyResponseCount: { increment: 1 },
+          dailyResponseCount: { increment: 1 }, // 🔥 IMPORTANT
         },
       });
 

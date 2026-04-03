@@ -7,7 +7,6 @@ const router = express.Router();
 
 // 🔒 Apply API Key Auth to ALL routes in this file
 router.use(apiKeyAuth);
-router.use(checkAPIAccess);
 
 // ---------------------------------------------------------
 // 1. FETCH FORM (Get structure/questions)

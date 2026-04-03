@@ -82,21 +82,11 @@ export const checkAPIAccess = async (req, res, next) => {
   try {
     const {  plan } = req.user;
     const method = req.method; // GET, POST, etc.
-    const apiAccessLevel = PLAN_LIMITS[plan].apiAccess;
-    
-    if (apiAccessLevel === "NONE") {
-      return res.status(403).json({
-        success: false,
-        message: `API access is not available for ${plan} plan. Please upgrade to access API features.`,
-      });
-    }
 
-    if (apiAccessLevel === "READ" && method !== "GET") {
-      return res.status(403).json({
-        success: false,
-        message: `API access is limited to read-only for ${plan} plan. Please upgrade to access full API features.`,
-      });
-    }
+
+
+
+    
 
     if (apiAccessLevel === "FULL") {
       return next(); // Full API access, allow all methods
@@ -125,7 +115,7 @@ export const checkAccountStatus = async (req, res, next) => {
     }
 
     // Check if the account is suspended
-    if (user.status === "SUSPENDED") {
+    if (user.AccountStatus === "SUSPENDED") {
       return res.status(403).json({
         success: false,
         message: "Your account has been suspended. Please contact support to restore access.",

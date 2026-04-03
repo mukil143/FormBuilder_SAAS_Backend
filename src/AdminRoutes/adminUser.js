@@ -5,6 +5,12 @@ const router = express.Router();
 import { trackActivity } from "../Middleware/activityMiddleware.js";
 import { comparePassword, hashPassword } from "../utils/hashPassword.js";
 import { razorpay } from "../config/razorpay.js";
+import {
+  createPlatformPlan,
+  deletePlatformPlan,
+  savePlatformRazorpayKeys,
+  updatePlatformPlan,
+} from "../controllers/adminPaymentController.js";
 /**
  * GET ALL USERS
  * GET /api/admin/users
@@ -16,47 +22,69 @@ router.get(
   async (req, res) => {
     try {
       const users = await prisma.user.findMany({
-        where: {
-          role: "USER",
-        },
+        where: { role: "USER" },
         select: {
           userId: true,
           name: true,
           email: true,
           role: true,
-          plan: true,
-          lastActiveAt: true, // 👈 Fetch the timestamp
+          lastActiveAt: true,
           createdAt: true,
           formCount: true,
           monthlyResponseCount: true,
-          AccountStatus: true,
+          AccountStatus: true, // ✅ fixed
+          subscriptions: {
+            where: { status: "active" },
+            take: 1,
+            include: {
+              planDetails: true,
+            },
+          },
         },
         orderBy: { createdAt: "desc" },
       });
 
-      if (users.length === 0 || users === null || users === undefined) {
+      if (!users || users.length === 0) {
         return res.status(404).json({
           success: false,
           message: "No users found",
         });
       }
 
-      // Define the threshold (e.g., 5 minutes)
       const FIVE_MINUTES = 5 * 60 * 1000;
       const now = new Date();
 
-      const usersWithStatus = users.map((user) => {
-        // Calculate time difference
-        const lastSeen = new Date(user.lastActiveAt).getTime();
-        const timeDiff = now.getTime() - lastSeen;
+      // 🔥 Get FREE plan once (optimization)
+      const freePlan = await prisma.plan.findFirst({
+        where: { planType: "FREE", isActive: true },
+      });
 
-        // If difference is less than 5 mins, they are Online
-        const isOnline = timeDiff < FIVE_MINUTES;
+      const usersWithStatus = users.map((user) => {
+        const lastSeen = new Date(user.lastActiveAt).getTime();
+        const isOnline = now.getTime() - lastSeen < FIVE_MINUTES;
+
+        const activeSub = user.subscriptions[0];
+        const plan = activeSub ? activeSub.planDetails : freePlan;
 
         return {
-          ...user,
+          userId: user.userId,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          createdAt: user.createdAt,
+          formCount: user.formCount,
+          monthlyResponseCount: user.monthlyResponseCount,
+          accountStatus: user.accountStatus,
+
+          // 🔥 Plan info
+          plan: {
+            planType: plan?.planType || "FREE",
+            name: plan?.name || "Free Plan",
+          },
+
+          // 🔥 Status
           status: isOnline ? "Online" : "Offline",
-          lastSeen: user.lastActiveAt, // Optional: Return simpler timestamp
+          lastSeen: user.lastActiveAt,
         };
       });
 
@@ -66,7 +94,12 @@ router.get(
         data: usersWithStatus,
       });
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      console.error(error);
+      res.status(500).json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
     }
   },
 );
@@ -81,7 +114,8 @@ router.post(
   [protect, trackActivity, admin],
   async (req, res) => {
     try {
-      const { name, email, password, role } = req.body;
+      let { name, email, password, role } = req.body;
+
       if (!name || !email || !password) {
         return res.status(400).json({
           success: false,
@@ -89,19 +123,20 @@ router.post(
         });
       }
 
+      name = name.trim();
+      email = email.toLowerCase().trim();
+      role = role || "USER";
+
       if (password.length < 6) {
         return res.status(400).json({
           success: false,
           message: "Password must be at least 6 characters",
         });
       }
-      const existingUser = await prisma.user.findUnique({
-        where: {
-          email,
-        },
-      });
 
-      console.log(existingUser);
+      const existingUser = await prisma.user.findUnique({
+        where: { email },
+      });
 
       if (existingUser) {
         return res.status(400).json({
@@ -119,12 +154,30 @@ router.post(
           password: passwordHash,
           role,
         },
+        select: {
+          userId: true,
+          name: true,
+          email: true,
+          role: true,
+          createdAt: true,
+        },
       });
 
-      res.status(201).json({
+      // 🔥 FREE plan for response
+      const freePlan = await prisma.plan.findFirst({
+        where: { planType: "FREE", isActive: true },
+      });
+
+      return res.status(201).json({
         success: true,
         message: "User created successfully",
-        user,
+        data: {
+          ...user,
+          plan: {
+            planType: freePlan?.planType || "FREE",
+            name: freePlan?.name || "Free Plan",
+          },
+        },
       });
     } catch (error) {
       console.error(error);
@@ -260,20 +313,20 @@ router.get(
   async (req, res) => {
     try {
       const { id } = req.params;
+
+      // 🔥 1. Get user
       const user = await prisma.user.findUnique({
-        where: {
-          userId: id,
-        },
+        where: { userId: id },
         select: {
           userId: true,
           name: true,
           email: true,
           role: true,
           createdAt: true,
-          plan: true,
           formCount: true,
           monthlyResponseCount: true,
-          AccountStatus: true,
+          dailyResponseCount: true, // ✅ add
+          AccountStatus: true, // ✅ fixed
           form: {
             select: {
               formId: true,
@@ -293,10 +346,69 @@ router.get(
         });
       }
 
-      res.status(200).json({
+      // 🔥 2. Get subscription + plan
+      const subscription = await prisma.subscription.findFirst({
+        where: {
+          userId: id,
+          status: "active",
+        },
+        include: {
+          planDetails: true,
+        },
+      });
+
+      let plan;
+
+      if (subscription) {
+        plan = subscription.planDetails;
+      } else {
+        plan = await prisma.plan.findFirst({
+          where: { planType: "FREE", isActive: true },
+        });
+      }
+
+      // 🔥 3. Calculate limits
+      const limits = {
+        monthly: {
+          used: user.monthlyResponseCount,
+          limit: plan?.monthlyResponseLimit ?? 0,
+          remaining: Math.max(
+            (plan?.monthlyResponseLimit ?? 0) - user.monthlyResponseCount,
+            0,
+          ),
+        },
+        daily: {
+          used: user.dailyResponseCount,
+          limit: plan?.dailyResponseLimit ?? 0,
+          remaining: Math.max(
+            (plan?.dailyResponseLimit ?? 0) - user.dailyResponseCount,
+            0,
+          ),
+        },
+        forms: {
+          used: user.formCount,
+          limit: plan?.activeFormLimit ?? 0,
+          remaining: Math.max((plan?.activeFormLimit ?? 0) - user.formCount, 0),
+        },
+        apiKeys: {
+          limit: plan?.apiKeyLimit ?? 0,
+        },
+        users: {
+          limit: plan?.userLimit ?? 0,
+        },
+      };
+
+      return res.status(200).json({
         success: true,
         message: "User fetched successfully",
-        user,
+        data: {
+          ...user,
+          plan: {
+            planType: plan?.planType || "FREE",
+            name: plan?.name || "Free Plan",
+          },
+          limits,
+        },
       });
     } catch (error) {
       console.error(error);
@@ -544,9 +656,13 @@ router.get(
   [protect, trackActivity, admin],
   async (req, res) => {
     try {
+      const { userId } = req.user;
       const admins = await prisma.user.findMany({
         where: {
           role: "ADMIN",
+          userId: {
+            not: userId, // Exclude the currently logged-in admin from the list
+          },
         },
         select: {
           userId: true,
@@ -723,7 +839,7 @@ router.patch(
           .json({ success: false, message: "User not found." });
       }
 
-      if(user.AccountStatus === status) {
+      if (user.AccountStatus === status) {
         return res.status(400).json({
           success: false,
           message: `User is already ${status}.`,
@@ -766,5 +882,76 @@ router.patch(
     }
   },
 );
+
+/**
+ * Admin Routes to manage Razorpay keys and plans will go here (if needed)
+ * For example:
+ * - POST /api/admin/payment/keys to set Razorpay keys
+ * - POST /api/admin/payment/plans to create subscription plans
+ * - GET /api/admin/payment/plans to list subscription plans
+ * - etc.
+ */
+router.post(
+  "/api/admin/payment/keys",
+  [protect, trackActivity, admin],
+  savePlatformRazorpayKeys,
+);
+
+router.post(
+  "/api/admin/payment/plans",
+  [protect, trackActivity, admin],
+  createPlatformPlan,
+);
+// Get all plans (for admin dashboard)
+router.get(
+  "/api/admin/payment/plans",
+  [protect, trackActivity, admin],
+  async (req, res) => {
+    const plans = await razorpay.plans.all();
+    if (!plans) {
+      return res.status(404).json({
+        success: false,
+        message: "No plans found",
+      });
+    }
+    plans.items.forEach((plan) => {
+      plan.amount = plan.amount / 100; // Convert from paise to rupees
+    });
+    res.status(200).json({
+      success: true,
+      message: "Plans fetched successfully",
+      data: plans,
+    });
+  },
+);
+
+/**
+ * update the existing plan
+ * PUT /api/admin/payment/plans/:planId
+ * Access Control: Admin
+ */
+router.put(
+  "/api/admin/payment/plans/:planId",
+  [protect, trackActivity, admin],
+  updatePlatformPlan,
+);
+
+/**
+ * Delete a plan
+ * DELETE /api/admin/payment/plans/:planId
+ * Access Control: Admin
+ * Note: Deleting a plan that has active subscriptions can cause issues. Consider implementing a "deactivate" feature instead of hard deletion in production.
+ */
+router.delete(
+  "/api/admin/payment/plans",
+  [protect, trackActivity, admin],
+  deletePlatformPlan,
+);
+
+/**
+ * Get all plans
+ * GET /api/admin/payment/plans
+ * Access Control: Admin
+ */
 
 export default router;

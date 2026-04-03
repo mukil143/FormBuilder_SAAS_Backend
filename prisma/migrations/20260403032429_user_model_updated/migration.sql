@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN     "teamSize" INTEGER NOT NULL DEFAULT 1;
