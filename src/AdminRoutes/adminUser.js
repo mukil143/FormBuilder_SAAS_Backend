@@ -74,7 +74,7 @@ router.get(
           createdAt: user.createdAt,
           formCount: user.formCount,
           monthlyResponseCount: user.monthlyResponseCount,
-          accountStatus: user.accountStatus,
+          accountStatus: user.AccountStatus,
 
           // 🔥 Plan info
           plan: {
