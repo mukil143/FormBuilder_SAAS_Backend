@@ -6,6 +6,7 @@ import { trackActivity } from "../Middleware/activityMiddleware.js";
 import { comparePassword, hashPassword } from "../utils/hashPassword.js";
 import { razorpay } from "../config/razorpay.js";
 import {
+  activatePlatformPlan,
   createPlatformPlan,
   deletePlatformPlan,
   savePlatformRazorpayKeys,
@@ -907,15 +908,17 @@ router.get(
   "/api/admin/payment/plans",
   [protect, trackActivity, admin],
   async (req, res) => {
-    const plans = await razorpay.plans.all();
+    const plans = await prisma.plan.findMany();
     if (!plans) {
       return res.status(404).json({
         success: false,
         message: "No plans found",
       });
     }
-    plans.items.forEach((plan) => {
-      plan.amount = plan.amount / 100; // Convert from paise to rupees
+    console.log("plans:", plans);
+    plans.forEach((plan) => {
+      console.log("plan:", plan);
+      plan.amount = plan.amount / 100; // Convert from paise to rupees for frontend display
     });
     res.status(200).json({
       success: true,
@@ -949,9 +952,15 @@ router.delete(
 );
 
 /**
- * Get all plans
- * GET /api/admin/payment/plans
+ * Activate the archived plan
+ * PATCH /api/admin/payment/plans/:planId/activate
  * Access Control: Admin
+ * Note: This endpoint can be used to reactivate a plan that was previously archived (soft-deleted). It will set the plan's isActive flag back to true.
  */
+router.patch(
+  "/api/admin/payment/plans/:planId/activate",
+  [protect, trackActivity, admin],
+  activatePlatformPlan,
+);
 
 export default router;

@@ -10,8 +10,13 @@ export const getRazorpayInstance = async () => {
     throw new Error("Razorpay credentials not configured by Admin.");
   }
 
+  const razorpaysecret = decrypt(settings.razorpayKeySecret);
+
+  if (!razorpaysecret) {
+    throw new Error("Failed to decrypt Razorpay secret key.");
+  }
   return new Razorpay({
     key_id: settings.razorpayKeyId,
-    key_secret: decrypt(settings.razorpayKeySecret),
+    key_secret: razorpaysecret,
   });
 };

@@ -1,5 +1,6 @@
 // src/controllers/adminPaymentController.js
 import { prisma } from "../config/db.js";
+import { razorpay } from "../config/razorpay.js";
 import { encrypt } from "../utils/encryption.js";
 import { getRazorpayInstance } from "../utils/razorpayInstance.js";
 import Razorpay from "razorpay";
@@ -337,7 +338,6 @@ export const deletePlatformPlan = async (req, res) => {
     const activeSubs = await prisma.subscription.count({
       where: {
         planId,
-        status: "active",
       },
     });
 
@@ -372,3 +372,51 @@ export const deletePlatformPlan = async (req, res) => {
     });
   }
 };
+
+
+/**
+ * activate the archived plan if the admin wants to activate the plan again.
+ * path: POST /api/admin/payment/plans/activate
+ */
+export const activatePlatformPlan = async (req, res) => {
+  try {
+    const { planId } = req.body;
+
+    if (!planId) {
+      return res.status(400).json({
+        success: false,
+        message: "planId is required",
+      });
+    }
+
+    const plan = await prisma.plan.findUnique({
+      where: { id: planId },
+    });
+
+    if (!plan) {
+      return res.status(404).json({
+        success: false,
+        message: "Plan not found",
+      });
+    }
+
+    const updated = await prisma.plan.update({
+      where: { id: planId },
+      data: { isActive: true },
+    });
+
+    return res.json({
+      success: true,
+      message: "Plan activated successfully",
+      plan: updated,
+    });
+  } catch (error) {
+    console.error("Activate Plan Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
