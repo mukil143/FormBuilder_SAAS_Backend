@@ -127,6 +127,15 @@ router.post("/api/users/login", [authLimiter], async (req, res) => {
       });
     }
 
+    if(user.AccountStatus === "SUSPENDED") {
+      return res.status(403).json({
+        success: false,
+        message: "Your account has been suspended.",
+        errorCode: "ACCOUNT_SUSPENDED",
+      });
+    }
+
+
     // 🔥 2. Check password
     const isMatch = await comparePassword(password, user.password);
 
@@ -137,7 +146,7 @@ router.post("/api/users/login", [authLimiter], async (req, res) => {
     }
 
     // 🚨 3. Account status check
-    if (user.accountStatus === "SUSPENDED") {
+    if (user.AccountStatus === "SUSPENDED") {
       return res.status(403).json({
         success: false,
         message: "Your account has been suspended.",
@@ -145,13 +154,6 @@ router.post("/api/users/login", [authLimiter], async (req, res) => {
       });
     }
 
-    if (user.accountStatus === "DEACTIVATED") {
-      return res.status(403).json({
-        success: false,
-        message: "Your account is deactivated.",
-        errorCode: "ACCOUNT_DEACTIVATED",
-      });
-    }
 
     // 🔥 4. Get active subscription
     const subscription = await prisma.subscription.findFirst({
