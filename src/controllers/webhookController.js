@@ -1,51 +1,62 @@
 import crypto from "node:crypto";
-import { prisma } from "../config/db.js"; // Check if this path is correct for you
-import { PLAN_IDS } from "../config/razorpay.js";
+import { prisma } from "../config/db.js";
 import { sendEmail } from "../config/resend.js";
 import { decrypt } from "../utils/encryption.js";
-// Import the transporter from the new file
-
-const getPlanTypeFromId = (razorpayPlanId) => {
-  const planKey = Object.keys(PLAN_IDS).find(
-    (key) => PLAN_IDS[key] === razorpayPlanId,
-  );
-  return planKey || "FREE";
-};
-
-// This controller handles Razorpay webhooks for subscription events
+import { getRazorpayInstance } from "../utils/razorpayInstance.js";
 
 export const handleRazorpayWebhook = async (req, res) => {
   try {
-    // 1. SECURITY: Verify Signature
-    const secret = decrypt(await prisma.platformSetting.findFirst().then((setting) => setting.razorpayWebhookSecret)
-    );
+    // =========================================================
+    // 🔐 1. VERIFY SIGNATURE
+    // =========================================================
+    const setting = await prisma.platformSetting.findFirst();
+    const secret = decrypt(setting?.razorpayWebhookSecret);
+
     if (!secret) {
-      console.error("⚠️ Missing Razorpay Webhook Secret in Platform Settings");
+      console.error("⚠️ Missing webhook secret");
       return res.status(500).json({ status: "missing_secret" });
     }
 
     const signature = req.headers["x-razorpay-signature"];
 
-    // 🚨 FIX 1: Pass the raw Buffer directly. Do NOT use JSON.stringify().
+    // Use req.body directly assuming it's an express.raw buffer
     const shasum = crypto.createHmac("sha256", secret);
     shasum.update(req.body);
     const digest = shasum.digest("hex");
 
     if (digest !== signature) {
-      console.error("⚠️ Invalid Webhook Signature");
+      console.error("⚠️ Invalid signature");
       return res.status(400).json({ status: "invalid_signature" });
     }
 
-    // 🚨 FIX 2: Manually parse the Buffer into JSON now that it's verified
+    // =========================================================
+    // 📦 2. PARSE BODY
+    // =========================================================
     const body = JSON.parse(req.body.toString());
-
-    // Use 'body' instead of 'req.body' for the rest of the logic
     const event = body.event;
-    const payload = body.payload;
-    const subData = payload.subscription.entity;
+    const subData = body.payload.subscription.entity;
 
-    console.log(`🔔 Webhook Received: ${event}`);
+    console.log(`🔔 Webhook Received: ${event} for Sub ID: ${subData.id}`);
 
+    // =========================================================
+    // 🛑 3. IGNORE DELETED PENDING
+    // =========================================================
+    const existing = await prisma.subscription.findUnique({
+      where: { razorpaySubscriptionId: subData.id },
+    });
+
+    if (
+      !existing &&
+      event !== "subscription.charged" &&
+      event !== "subscription.authenticated"
+    ) {
+      console.log("⚠️ Ignored webhook for unrecorded subscription.");
+      return res.json({ status: "ignored" });
+    }
+
+    // =========================================================
+    // 🎯 4. ROUTE EVENTS
+    // =========================================================
     const handlers = {
       "subscription.authenticated": handleAuthenticated,
       "subscription.charged": handleCharged,
@@ -54,183 +65,156 @@ export const handleRazorpayWebhook = async (req, res) => {
     };
 
     const handler = handlers[event];
-    if (handler) {
-      const result = await handler(subData, event);
-      if (result === "already_processed") {
-        return res.json({ status: "already_processed" });
-      }
-      return res.json({ status: "ok" });
-    } else {
-      console.error("⚠️ Invalid Webhook Event:", event);
-      return res.status(400).json({ status: "invalid_event" });
+
+    if (!handler) {
+      console.log("⚠️ Ignored unhandled event:", event);
+      return res.json({ status: "ignored" });
     }
+
+    // Pass the payload to the specific handler
+    const result = await handler(subData, event, existing);
+
+    return res.json({
+      status: result === "already_processed" ? "already_processed" : "ok",
+    });
   } catch (error) {
-    console.error("Webhook Error:", error);
+    console.error("Webhook Master Error:", error);
+    // Always return 200 to Razorpay so they don't keep retrying on our internal server errors
     return res.status(200).json({ status: "error_handled" });
   }
 };
 
-const handleAuthenticated = async (subData) => {
-  const { id, plan_id, current_end, notes } = subData;
+// =========================================================
+// 🛠️ HANDLER FUNCTIONS
+// =========================================================
+
+const handleAuthenticated = async (subData, event, existing) => {
+  const { id, current_end, notes } = subData;
   const userId = notes?.userId;
+  const planId = notes?.planId;
 
-  if (!userId) throw new Error("Missing userId in notes");
-
-  // 🔥 Get plan
-  const plan = await prisma.plan.findUnique({
-    where: { razorpayPlanId: plan_id },
-  });
-
-  if (!plan) {
-    console.error("⚠️ Plan not found for:", plan_id);
-    return "ignored";
-  }
-
-  // 🔥 Idempotency
-  const existing = await prisma.subscription.findUnique({
-    where: { razorpaySubscriptionId: id },
-  });
+  if (!userId || !planId) return "ignored";
 
   if (existing?.status === "active") {
-    console.log("Already processed authenticated");
     return "already_processed";
   }
 
-  // 🔥 Transaction (VERY IMPORTANT)
-  await prisma.$transaction([
-    prisma.subscription.updateMany({
-      where: {
-        userId,
-        status: "active",
-        razorpaySubscriptionId: { not: id },
-      },
-      data: { status: "cancelled" },
-    }),
+  const razorpay = await getRazorpayInstance();
 
-    prisma.subscription.upsert({
-      where: { razorpaySubscriptionId: id },
-      update: {
-        status: "active",
-        planId: plan.id,
-        currentPeriodEnd: new Date(current_end * 1000),
-      },
-      create: {
-        userId,
-        razorpaySubscriptionId: id,
-        planId: plan.id,
-        status: "active",
-        currentPeriodEnd: new Date(current_end * 1000),
-      },
-    }),
-  ]);
+  // 🔥 Cancel old active subscriptions in Razorpay and DB
+  const oldSubs = await prisma.subscription.findMany({
+    where: {
+      userId,
+      status: "active",
+      razorpaySubscriptionId: { not: id },
+    },
+  });
 
+  for (const sub of oldSubs) {
+    try {
+      const rzpSub = await razorpay.subscriptions.fetch(
+        sub.razorpaySubscriptionId,
+      );
+      if (rzpSub.status === "active") {
+        await razorpay.subscriptions.cancel(sub.razorpaySubscriptionId, false);
+      }
+      await prisma.subscription.update({
+        where: { razorpaySubscriptionId: sub.razorpaySubscriptionId },
+        data: { status: "cancelled" },
+      });
+    } catch (err) {
+      console.log(
+        "⚠️ Skip cancel old sub:",
+        err?.error?.description || err.message,
+      );
+    }
+  }
+
+  // 🔥 Activate new subscription
+  await prisma.subscription.upsert({
+    where: { razorpaySubscriptionId: id },
+    update: {
+      status: "active",
+      currentPeriodEnd: new Date(current_end * 1000),
+      planId,
+    },
+    create: {
+      userId,
+      razorpaySubscriptionId: id,
+      planId,
+      status: "active",
+      currentPeriodEnd: new Date(current_end * 1000),
+    },
+  });
+
+  // Optional: Send Welcome Email
   const user = await prisma.user.findUnique({ where: { userId } });
-
   if (user) {
     await sendEmail({
       to: user.email,
       subject: "Subscription Activated",
-      html: `<p>Your subscription is now active (${plan.name})</p>`,
+      html: `<p>Your new plan is now active! Thank you for subscribing.</p>`,
     });
   }
 
-  console.log(`✅ User ${userId} subscribed to ${plan.name}`);
+  console.log("✅ Subscription authenticated and activated.");
   return "ok";
 };
 
 const handleCharged = async (subData) => {
-  const { id, plan_id, current_end, notes } = subData;
+  const { id, current_end, notes } = subData;
   const userId = notes?.userId;
 
-  if (!userId) throw new Error("Missing userId");
-
-  const plan = await prisma.plan.findUnique({
-    where: { razorpayPlanId: plan_id },
-  });
-
-  if (!plan) {
-    console.error("⚠️ Plan not found:", plan_id);
-    return "ignored";
-  }
-
-  await prisma.$transaction([
-    prisma.subscription.upsert({
+  // 🔥 Transaction: Update subscription AND reset user form limits
+  await prisma.$transaction(async (tx) => {
+    await tx.subscription.update({
       where: { razorpaySubscriptionId: id },
-      update: {
-        status: "active",
-        planId: plan.id,
-        currentPeriodEnd: new Date(current_end * 1000), // ✅ always update
-      },
-      create: {
-        userId,
-        razorpaySubscriptionId: id,
-        planId: plan.id,
+      data: {
         status: "active",
         currentPeriodEnd: new Date(current_end * 1000),
       },
-    }),
-
-    prisma.user.update({
-      where: { userId },
-      data: {
-        monthlyResponseCount: 0, // reset on renewal
-        dailyResponseCount: 0,
-      },
-    }),
-  ]);
-
-  const user = await prisma.user.findUnique({ where: { userId } });
-
-  if (user) {
-    await sendEmail({
-      to: user.email,
-      subject: "Subscription Renewed",
-      html: `<p>Your subscription has been renewed (${plan.name})</p>`,
     });
-  }
 
-  console.log(`✅ Subscription renewed for ${id}`);
+    if (userId) {
+      await tx.user.update({
+        where: { userId },
+        data: {
+          monthlyResponseCount: 0, // 🚨 Reset usage limits for the new billing month!
+          // dailyResponseCount: 0 // Reset this via a daily cron job instead of here
+        },
+      });
+    }
+  });
+
+  console.log(
+    `✅ Subscription ${id} successfully charged. Usage limits reset.`,
+  );
   return "ok";
 };
 
 const handleCancelledOrHalted = async (subData, event) => {
-  try {
-    const { id, notes } = subData;
-    const userId = notes?.userId;
+  const { id, notes } = subData;
+  const userId = notes?.userId;
+  const status = event === "subscription.cancelled" ? "cancelled" : "halted";
 
-    if (!userId) return "ignored";
+  await prisma.subscription.updateMany({
+    where: { razorpaySubscriptionId: id },
+    data: { status },
+  });
 
-    const status = event === "subscription.cancelled" ? "cancelled" : "halted";
-
-    const existing = await prisma.subscription.findUnique({
-      where: { razorpaySubscriptionId: id },
-    });
-
-    if (existing?.status === status) {
-      console.log("Already processed");
-      return "already_processed";
-    }
-
-    await prisma.subscription.updateMany({
-      where: { razorpaySubscriptionId: id },
-      data: { status },
-    });
-
+  // Notify the user their plan failed or was cancelled
+  if (userId) {
     const user = await prisma.user.findUnique({ where: { userId } });
-
     if (user) {
       await sendEmail({
         to: user.email,
         subject:
           status === "cancelled" ? "Subscription Cancelled" : "Payment Failed",
-        html: `<p>Your subscription has been ${status}</p>`,
+        html: `<p>Your subscription has been ${status}. Please update your billing details to maintain access to premium features.</p>`,
       });
     }
-
-    console.log(`✅ Subscription ${status} for ${userId}`);
-    return "ok";
-  } catch (error) {
-    console.error("Cancel/Halt Error:", error);
-    return "error";
   }
+
+  console.log(`⚠️ Subscription ${id} marked as ${status}`);
+  return "ok";
 };

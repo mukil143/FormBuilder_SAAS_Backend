@@ -74,15 +74,11 @@ router.get('/api/dashboard/master-fields',[protect,trackActivity], async (req, r
       where: { userId }
     });
 
-    if (masterFields.length === 0) {
-      return res.status(404).json({ success: false, message: 'Master fields not found' });
-    }
-
 
     res.status(200).json({
       success: true,
       message: 'Master fields fetched successfully',
-      data: masterFields
+      data: masterFields.length > 0 ? masterFields : []
     });
   } catch (error) {
     res.status(500).json({success: false, message: 'Failed to fetch master fields', error: error.message });

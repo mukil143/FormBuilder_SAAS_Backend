@@ -958,7 +958,7 @@ router.delete(
  * Note: This endpoint can be used to reactivate a plan that was previously archived (soft-deleted). It will set the plan's isActive flag back to true.
  */
 router.patch(
-  "/api/admin/payment/plans/:planId/activate",
+  "/api/admin/payment/plans/activate",
   [protect, trackActivity, admin],
   activatePlatformPlan,
 );

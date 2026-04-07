@@ -125,17 +125,12 @@ router.get(
         orderBy: { createdAt: "desc" },
       });
 
-      if (!forms) {
-        return res.status(404).json({
-          success: false,
-          message: "No forms found for the user",
-        });
-      }
+
 
       return res.status(200).json({
         success: true,
         count: forms.length,
-        data: forms,
+        data: forms || [],
       });
     } catch (error) {
       return res.status(500).json({

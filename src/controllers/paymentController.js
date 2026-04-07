@@ -190,6 +190,159 @@ import { getRazorpayInstance } from "../utils/razorpayInstance.js";
 //   }
 // };
 
+// export const createSubscription = async (req, res) => {
+//   try {
+//     const { planId } = req.body;
+//     const userId = req.user.userId;
+
+//     if (!planId) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "planId is required",
+//       });
+//     }
+
+//     // 🔥 1. Get plan
+//     const plan = await prisma.plan.findUnique({
+//       where: { id: planId },
+//     });
+
+//     if (!plan || !plan.isActive) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid or inactive plan",
+//       });
+//     }
+
+//     // 🔥 2. Get user
+//     const user = await prisma.user.findUnique({
+//       where: { userId },
+//     });
+
+//     if (!user) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "User not found",
+//       });
+//     }
+
+//     const razorpay = await getRazorpayInstance();
+
+//     // =========================================================
+//     // 🔥 3. CLEAN OLD PENDING SUBSCRIPTIONS (IMPORTANT)
+//     // =========================================================
+
+//     const pendingSubs = await prisma.subscription.findMany({
+//       where: {
+//         userId,
+//         status: "created",
+//       },
+//     });
+
+//     for (const sub of pendingSubs) {
+//       try {
+//         const rzpSub = await razorpay.subscriptions.fetch(
+//           sub.razorpaySubscriptionId,
+//         );
+
+//         // Only cancel if still pending in Razorpay
+//         if (rzpSub.status === "created") {
+//           await razorpay.subscriptions.cancel(
+//             sub.razorpaySubscriptionId,
+//             false,
+//           );
+
+//           console.log(
+//             "🗑️ Cancelled pending Razorpay sub:",
+//             sub.razorpaySubscriptionId,
+//           );
+//         }
+//       } catch (err) {
+//         console.log(
+//           "⚠️ Skip cancel pending:",
+//           err?.error?.description || err.message,
+//         );
+//       }
+//     }
+
+//     // Delete all pending from DB
+//     await prisma.subscription.deleteMany({
+//       where: {
+//         userId,
+//         status: "created",
+//       },
+//     });
+
+//     // =========================================================
+//     // 🔥 4. GET / CREATE CUSTOMER
+//     // =========================================================
+
+//     let customerId = user.razorpayCustomerId;
+
+//     if (!customerId) {
+//       const customer = await razorpay.customers.create({
+//         name: user.name,
+//         email: user.email,
+//         contact: user.phone || "9999999999",
+//         fail_existing: 0,
+//       });
+
+//       customerId = customer.id;
+
+//       await prisma.user.update({
+//         where: { userId },
+//         data: { razorpayCustomerId: customerId },
+//       });
+//     }
+
+//     // =========================================================
+//     // 🔥 5. CREATE NEW SUBSCRIPTION
+//     // =========================================================
+
+//     const subscription = await razorpay.subscriptions.create({
+//       plan_id: plan.razorpayPlanId,
+//       customer_id: customerId,
+//       total_count: 12,
+//       quantity: 1,
+//       notes: {
+//         userId,
+//         planId: plan.id,
+//       },
+//     });
+
+//     // =========================================================
+//     // 🔥 6. SAVE IN DB (CREATED STATE)
+//     // =========================================================
+
+//     await prisma.subscription.create({
+//       data: {
+//         userId,
+//         razorpaySubscriptionId: subscription.id,
+//         planId: plan.id,
+//         status: "created",
+//         currentPeriodEnd: new Date(),
+//       },
+//     });
+
+//     // =========================================================
+//     // ✅ RESPONSE
+//     // =========================================================
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Subscription created. Complete payment to activate.",
+//       subscriptionId: subscription.id,
+//     });
+//   } catch (error) {
+//     console.error("Create Subscription Error:", error);
+
+//     return res.status(500).json({
+//       success: false,
+//       message: error.message || "Failed to create subscription",
+//     });
+//   }
+// };
+
 export const createSubscription = async (req, res) => {
   try {
     const { planId } = req.body;
@@ -202,7 +355,7 @@ export const createSubscription = async (req, res) => {
       });
     }
 
-    // 🔥 1. Get plan
+    // 🔥 Get plan
     const plan = await prisma.plan.findUnique({
       where: { id: planId },
     });
@@ -214,7 +367,7 @@ export const createSubscription = async (req, res) => {
       });
     }
 
-    // 🔥 2. Get user
+    // 🔥 Get user
     const user = await prisma.user.findUnique({
       where: { userId },
     });
@@ -228,56 +381,50 @@ export const createSubscription = async (req, res) => {
 
     const razorpay = await getRazorpayInstance();
 
-    // 🔥 3. Get current active subscription
-    const currentSub = await prisma.subscription.findFirst({
+    // ====================================================
+    // 🔥 CLEAN OLD PENDING SUBSCRIPTIONS
+    // ====================================================
+    const pendingSubs = await prisma.subscription.findMany({
       where: {
         userId,
-        status: "active",
+        status: "created",
       },
     });
 
-    // 🛑 PREVENT SAME PLAN RE-SUBSCRIBE
-    if (currentSub && currentSub.planId === plan.id) {
-      return res.status(400).json({
-        success: false,
-        message: "Already subscribed to this plan",
-      });
-    }
-
-    // 🔥 4. Cancel old subscription (IMPORTANT)
-    if (currentSub) {
+    for (const sub of pendingSubs) {
       try {
-        await razorpay.subscriptions.cancel(
-          currentSub.razorpaySubscriptionId,
-          false, // immediate cancel
+        const rzpSub = await razorpay.subscriptions.fetch(
+          sub.razorpaySubscriptionId,
         );
 
-        // ✅ Update DB immediately (don't wait for webhook)
-        await prisma.subscription.update({
-          where: {
-            razorpaySubscriptionId: currentSub.razorpaySubscriptionId,
-          },
-          data: {
-            status: "cancelled",
-          },
-        });
-
-        console.log(
-          `♻️ Cancelled old subscription ${currentSub.razorpaySubscriptionId}`,
-        );
+        if (rzpSub.status === "created") {
+          await razorpay.subscriptions.cancel(
+            sub.razorpaySubscriptionId,
+            false,
+          );
+        }
       } catch (err) {
-        console.error("Failed to cancel old subscription:", err);
+        console.log("⚠️ Skip cancel:", err?.error?.description);
       }
     }
 
-    // 🔥 5. Get/Create Razorpay customer
+    await prisma.subscription.deleteMany({
+      where: {
+        userId,
+        status: "created",
+      },
+    });
+
+    // ====================================================
+    // 🔥 GET / CREATE CUSTOMER
+    // ====================================================
     let customerId = user.razorpayCustomerId;
 
     if (!customerId) {
       const customer = await razorpay.customers.create({
         name: user.name,
         email: user.email,
-        contact: user.phone || "9999999999",
+        contact: "9999999999",
         fail_existing: 0,
       });
 
@@ -289,19 +436,22 @@ export const createSubscription = async (req, res) => {
       });
     }
 
-    // 🔥 6. Create new subscription
+    // ====================================================
+    // 🔥 CREATE SUBSCRIPTION IN RAZORPAY
+    // ====================================================
     const subscription = await razorpay.subscriptions.create({
       plan_id: plan.razorpayPlanId,
       customer_id: customerId,
       total_count: 12,
-      quantity: 1,
       notes: {
         userId,
         planId: plan.id,
       },
     });
 
-    // 🔥 7. Save new subscription
+    // ====================================================
+    // 🔥 SAVE IN DB
+    // ====================================================
     await prisma.subscription.create({
       data: {
         userId,
@@ -314,7 +464,6 @@ export const createSubscription = async (req, res) => {
 
     return res.json({
       success: true,
-      message: "Subscription created successfully",
       subscriptionId: subscription.id,
     });
   } catch (error) {
