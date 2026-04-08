@@ -229,7 +229,9 @@ router.get(
           createdAt: true,
           formCount: true,
           monthlyResponseCount: true,
-          dailyResponseCount: true, // ✅ add this
+          dailyResponseCount: true,
+          AccountStatus: true,
+          // ✅ add this
         },
       });
 
@@ -287,6 +289,7 @@ router.get(
         users: {
           limit: plan?.userLimit ?? 0,
         },
+        themeAccess : plan.themeAccess ?? false
       };
 
       return res.status(200).json({

@@ -397,6 +397,7 @@ router.get(
         users: {
           limit: plan?.userLimit ?? 0,
         },
+        themeAccess: plan?.themeAccess ?? false,
       };
 
       return res.status(200).json({

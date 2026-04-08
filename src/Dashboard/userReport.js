@@ -63,13 +63,7 @@ router.get('/api/dashboard/user-report', [protect,trackActivity],async (req, res
       orderBy: { createdAt: 'desc' }
     });
 
-
-
-
-
-    if(reports[0].userId !== userId) {
-      return res.status(401).json({ success: false,message: 'Unauthorized' });
-    }
+    
 
     res.status(200).json({
       success: true,
