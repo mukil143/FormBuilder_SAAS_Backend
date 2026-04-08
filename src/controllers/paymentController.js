@@ -462,9 +462,12 @@ export const createSubscription = async (req, res) => {
       },
     });
 
+    const keyId  = await prisma.platformSetting.findFirst();
+
     return res.json({
       success: true,
       subscriptionId: subscription.id,
+      keyId: keyId.razorpayKeyId, // Frontend needs this to open the popup
     });
   } catch (error) {
     console.error("Create Subscription Error:", error);

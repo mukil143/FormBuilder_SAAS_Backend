@@ -65,9 +65,7 @@ router.get('/api/dashboard/user-report', [protect,trackActivity],async (req, res
 
 
 
-    if (reports.length === 0) {
-      return res.status(404).json({ success: false, message: 'User reports is empty' });
-    }
+
 
     if(reports[0].userId !== userId) {
       return res.status(401).json({ success: false,message: 'Unauthorized' });
@@ -76,7 +74,7 @@ router.get('/api/dashboard/user-report', [protect,trackActivity],async (req, res
     res.status(200).json({
       success: true,
       message: 'User reports fetched successfully',
-      data: reports
+      data: reports || []
     });
   } catch (error) {
     console.error(error);

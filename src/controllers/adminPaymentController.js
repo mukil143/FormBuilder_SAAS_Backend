@@ -373,7 +373,6 @@ export const deletePlatformPlan = async (req, res) => {
   }
 };
 
-
 /**
  * activate the archived plan if the admin wants to activate the plan again.
  * path: POST /api/admin/payment/plans/activate
@@ -400,6 +399,13 @@ export const activatePlatformPlan = async (req, res) => {
       });
     }
 
+    if (plan.isActive) {
+      return res.status(400).json({
+        status: false,
+        message: "Plan is already active",
+      });
+    }
+
     const updated = await prisma.plan.update({
       where: { id: planId },
       data: { isActive: true },
@@ -418,5 +424,3 @@ export const activatePlatformPlan = async (req, res) => {
     });
   }
 };
-
-
