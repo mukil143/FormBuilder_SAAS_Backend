@@ -4,7 +4,6 @@ import { admin, protect } from "../Middleware/authMiddleware.js";
 const router = express.Router();
 import { trackActivity } from "../Middleware/activityMiddleware.js";
 import { comparePassword, hashPassword } from "../utils/hashPassword.js";
-import { razorpay } from "../config/razorpay.js";
 import {
   activatePlatformPlan,
   createPlatformPlan,
