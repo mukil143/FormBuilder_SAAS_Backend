@@ -1,6 +1,4 @@
 import { prisma } from "../config/db.js"; // or ../config/db.js
-import { razorpay } from "../config/razorpay.js";
-
 // ---------------------------------------------------------
 // 1. GET SUBSCRIPTION DETAILS
 // GET /api/dashboard/subscription

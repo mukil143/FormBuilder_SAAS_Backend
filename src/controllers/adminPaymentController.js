@@ -1,6 +1,5 @@
 // src/controllers/adminPaymentController.js
 import { prisma } from "../config/db.js";
-import { razorpay } from "../config/razorpay.js";
 import { encrypt } from "../utils/encryption.js";
 import { getRazorpayInstance } from "../utils/razorpayInstance.js";
 import Razorpay from "razorpay";
@@ -113,6 +112,7 @@ export const createPlatformPlan = async (req, res) => {
     }
 
     const normalizedPeriod = period.toLowerCase();
+
 
     if (!checkValidPeriod(normalizedPeriod)) {
       return res.status(400).json({

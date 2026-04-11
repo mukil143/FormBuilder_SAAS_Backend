@@ -421,19 +421,43 @@ export const createSubscription = async (req, res) => {
     let customerId = user.razorpayCustomerId;
 
     if (!customerId) {
-      const customer = await razorpay.customers.create({
-        name: user.name,
-        email: user.email,
-        contact: "9999999999",
-        fail_existing: 0,
-      });
+      try {
+        const customer = await razorpay.customers.create({
+          name: user.name,
+          email: user.email,
+          fail_existing: 0,
+        });
+        customerId = customer.id;
+        console.log("✅ Created new customer:", customerId);
+        await prisma.user.update({
+          where: { userId },
+          data: { razorpayCustomerId: customerId },
+        });
+      } catch (error) {
+        if (error?.error?.description?.includes("Customer already exists")) {
+          console.log("⚠️ Customer exists → fetching existing");
 
-      customerId = customer.id;
+          // 🔥 Fetch existing customer list
+          const customers = await razorpay.customers.all({
+            email: user.email,
+          });
 
-      await prisma.user.update({
-        where: { userId },
-        data: { razorpayCustomerId: customerId },
-      });
+          if (customers.items.length === 0) {
+            throw new Error("Customer exists but not found");
+          }
+
+          console.log("coustomers", customers.items);
+
+          customerId = customers.items[0].id; // Assuming email is unique
+          console.log("✅ Found existing customer:", customerId);
+          await prisma.user.update({
+            where: { userId },
+            data: { razorpayCustomerId: customerId },
+          });
+        } else {
+          throw error;
+        }
+      }
     }
 
     // ====================================================
@@ -462,7 +486,7 @@ export const createSubscription = async (req, res) => {
       },
     });
 
-    const keyId  = await prisma.platformSetting.findFirst();
+    const keyId = await prisma.platformSetting.findFirst();
 
     return res.json({
       success: true,
