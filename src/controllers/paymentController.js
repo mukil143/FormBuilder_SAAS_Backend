@@ -429,6 +429,7 @@ export const createSubscription = async (req, res) => {
         });
         customerId = customer.id;
         console.log("✅ Created new customer:", customerId);
+
         await prisma.user.update({
           where: { userId },
           data: { razorpayCustomerId: customerId },
@@ -440,7 +441,9 @@ export const createSubscription = async (req, res) => {
           // 🔥 Fetch existing customer list
           const customers = await razorpay.customers.all({
             email: user.email,
+            count: 100,
           });
+
 
           if (customers.items.length === 0) {
             throw new Error("Customer exists but not found");

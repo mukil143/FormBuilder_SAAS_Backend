@@ -1,4 +1,6 @@
-import { prisma } from "../config/db.js"; // or ../config/db.js
+import { prisma } from "../config/db.js";
+import { getRazorpayInstance } from "../utils/razorpayInstance.js";
+// or ../config/db.js
 // ---------------------------------------------------------
 // 1. GET SUBSCRIPTION DETAILS
 // GET /api/dashboard/subscription
@@ -87,11 +89,9 @@ export const cancelSubscription = async (req, res) => {
       });
     }
 
+    const razorpay = await getRazorpayInstance();
     // 🔥 Call Razorpay cancel
-    await razorpay.subscriptions.cancel(
-      sub.razorpaySubscriptionId,
-      false, // immediate cancel
-    );
+    razorpay.subscriptions.cancel(sub.razorpaySubscriptionId, false);
 
     // ❗ DO NOT update DB here (correct)
     // webhook will handle it
