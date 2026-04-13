@@ -449,17 +449,13 @@ router.get(
           },
         },
       });
-      if (forms.length === 0 || forms === null || forms === undefined) {
-        return res.status(404).json({
-          success: false,
-          message: "No forms found",
-        });
-      }
+
+
 
       res.status(200).json({
         success: true,
         message: "Forms fetched successfully",
-        data: forms,
+        data: forms.length > 0 ? forms : [],
       });
     } catch (error) {
       console.error(error);
@@ -559,17 +555,10 @@ router.get(
         },
       });
 
-      if (form === null || form === undefined) {
-        return res.status(404).json({
-          success: false,
-          message: "Form not found",
-        });
-      }
-
       res.status(200).json({
         success: true,
         message: "Form responses fetched successfully",
-        data: form.formResponse,
+        data: form.formResponse.length > 0 ? form.formResponse : [],
       });
     } catch (error) {
       console.error(error);
@@ -673,16 +662,11 @@ router.get(
           createdAt: true,
         },
       });
-      if (admins.length === 0 || admins === null || admins === undefined) {
-        return res.status(404).json({
-          success: false,
-          message: "No admins found",
-        });
-      }
+
       return res.status(200).json({
         success: true,
         message: "Admins fetched successfully",
-        data: admins,
+        data: admins.length > 0 ? admins : [],
       });
     } catch (error) {
       console.error(error);
