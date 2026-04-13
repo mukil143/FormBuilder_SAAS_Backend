@@ -21,14 +21,12 @@ router.get('/api/dashboard/admin/user-reports', [protect,trackActivity,admin],as
 
     const reports = await prisma.userReport.findMany();
 
-    if (!reports) {
-      return res.status(404).json({ message: 'User reports not found' });
-    }
+
 
     res.status(200).json({
       success: true,
       message: 'User reports fetched successfully',
-      data: reports
+      data: reports.length > 0 ? reports : []
     });
   } catch (error) {
     console.error(error);
