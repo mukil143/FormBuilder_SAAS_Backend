@@ -3,6 +3,7 @@ import { prisma } from "../config/db.js";
 import { admin, protect } from "../Middleware/authMiddleware.js";
 const router = express.Router();
 import { trackActivity } from "../Middleware/activityMiddleware.js";
+
 import { comparePassword, hashPassword } from "../utils/hashPassword.js";
 import {
   activatePlatformPlan,
@@ -11,6 +12,7 @@ import {
   savePlatformRazorpayKeys,
   updatePlatformPlan,
 } from "../controllers/adminPaymentController.js";
+import { getRazorpayInstance } from "../utils/razorpayInstance.js";
 /**
  * GET ALL USERS
  * GET /api/admin/users
@@ -840,7 +842,7 @@ router.patch(
       // 5. Optional: If suspending, you might want to automatically cancel their active Razorpay subscription here
 
       console.log("razorpay subs:", user.subscriptions);
-
+      const razorpay =   await getRazorpayInstance();
       if (status === "SUSPENDED" && user.subscriptions.length > 0) {
         await razorpay.subscriptions.cancel(
           user.subscriptions[0].razorpaySubscriptionId,
