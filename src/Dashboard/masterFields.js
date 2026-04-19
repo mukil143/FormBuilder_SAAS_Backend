@@ -12,7 +12,7 @@ import { checkAccountStatus } from '../Middleware/accessGuard.js';
 router.post('/api/dashboard/master-fields', [protect,checkAccountStatus,trackActivity],async (req, res) => {
   try {
     const { userId } = req.user;
-    const { label, type , options} = req.body;
+    const { label, type , options,placeHolder,required,readOnly} = req.body;
 
     if (!label || !type || !userId) {
       return res.status(400).json({success: false,message: 'Missing required fields' });
@@ -47,7 +47,10 @@ router.post('/api/dashboard/master-fields', [protect,checkAccountStatus,trackAct
         label,
         type,
         userId,
-        options: options || null
+        options: options || null,
+        placeHolder: placeHolder || null,
+        required: required || false,
+        readOnly: readOnly || false
       }
     });
 
@@ -126,7 +129,7 @@ router.put('/api/dashboard/master-fields/:masterFieldId', [protect,trackActivity
   try {
     const { userId } = req.user;
     const { masterFieldId } = req.params;
-    const { label, type , options } = req.body;
+    const { label, type , options, placeHolder, required, readOnly} = req.body;
     if( !masterFieldId ) {
       return res.status(400).json({ success: false, message: 'Master field ID is required' });
     }
@@ -171,7 +174,10 @@ router.put('/api/dashboard/master-fields/:masterFieldId', [protect,trackActivity
       data: {
         label,
         type,
-        options: options || null
+        options: options || null,
+        placeHolder: placeHolder,
+        required: required,
+        readOnly: readOnly,
       }
     });
 
@@ -181,6 +187,7 @@ router.put('/api/dashboard/master-fields/:masterFieldId', [protect,trackActivity
       data: updated
     });
   } catch (error) {
+    console.error(error);
     res.status(404).json({success: false,message: 'Master field not found or update failed' });
   }
 });

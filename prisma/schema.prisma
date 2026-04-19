@@ -107,6 +107,9 @@ model MasterField {
   type          FieldType
   options       Json? // for dropdown, checkbox, radio
   userId        String
+  placeHolder     String?
+  required        Boolean @default(false)
+  readOnly        Boolean @default(false)
   user          User      @relation(fields: [userId], references: [userId],onDelete: Cascade)
 
   formField FormField[]
