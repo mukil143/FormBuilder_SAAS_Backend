@@ -227,6 +227,7 @@ router.delete('/api/dashboard/master-fields/:masterFieldId', [protect,trackActiv
     res.status(200).json({success: true, message: 'Master field deleted successfully' });
 
   } catch (error) {
+    console.error(error);
     res.status(404).json({ success: false,message: 'Master field not found' });
   }
 });

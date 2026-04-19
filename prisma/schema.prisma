@@ -137,6 +137,10 @@ model FormField {
   label       String
   required    Boolean @default(false)
   order       Int @default(0)
+  readOnly    Boolean @default(false)
+  placeholder String?
+  defaultValue String?
+
   type        FieldType
   options     Json? // for dropdown, checkbox, radio
   formId String

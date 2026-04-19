@@ -8,14 +8,19 @@ import { attachPlan } from "../Middleware/attachPlan.js";
 import { checkLimit } from "../Middleware/checkLimit.js";
 const router = express.Router();
 
-
 /**
  * CREATE FORM
  */
 
 router.post(
   "/api/dashboard/form",
-  [protect,checkAccountStatus, attachPlan, checkLimit("FORM_CREATE"), trackActivity],
+  [
+    protect,
+    checkAccountStatus,
+    attachPlan,
+    checkLimit("FORM_CREATE"),
+    trackActivity,
+  ],
   async (req, res) => {
     try {
       const { userId, role } = req.user;
@@ -41,8 +46,6 @@ router.post(
         .replaceAll(/[^a-z0-9]+/g, "-")
         .replaceAll(/(^-|-$)/g, "");
 
-
-
       const form = await prisma.form.create({
         data: {
           title,
@@ -55,6 +58,9 @@ router.post(
             create: fields?.map((field, idx) => ({
               label: field.label,
               required: field.required ?? false,
+              placeholder: field.placeHolder || null,
+              readOnly: field.readOnly || false,
+              defaultValue: field.defaultValue || null,
               order: idx,
               type: field.type,
               options: Array.isArray(field.options) ? field.options : [],
@@ -75,16 +81,16 @@ router.post(
         });
       }
 
-      const updateFormcount = await prisma.user.update({
+      await prisma.user.update({
         where: { userId },
         data: {
           formCount: {
             increment: 1,
-          }
+          },
         },
+      }).catch((err) => {
+        console.error("Failed to update form count:", err);
       });
-
-
 
       return res.status(201).json({
         success: true,
@@ -124,8 +130,6 @@ router.get(
         where: { userId },
         orderBy: { createdAt: "desc" },
       });
-
-
 
       return res.status(200).json({
         success: true,
@@ -274,6 +278,9 @@ router.put(
                 required: field.required ?? false,
                 order: field.order,
                 type: field.type,
+                placeholder: field.placeHolder || null,
+                readOnly: field.readOnly || false,
+                defaultValue: field.defaultValue || null,
                 options: Array.isArray(field.options) ? field.options : [],
                 masterFieldId: field.masterFieldId || null,
               },
@@ -288,6 +295,9 @@ router.put(
             required: field.required ?? false,
             order: field.order,
             type: field.type,
+            placeholder: field.placeHolder || null,
+            readOnly: field.readOnly || false,
+            defaultValue: field.defaultValue || null,
             options: Array.isArray(field.options) ? field.options : [],
             formId: formId,
             masterFieldId: field.masterFieldId || null,
@@ -336,7 +346,7 @@ router.put(
  */
 router.get(
   "/api/dashboard/form/details/:formId",
-  [protect,checkAccountStatus, trackActivity],
+  [protect, checkAccountStatus, trackActivity],
   async (req, res) => {
     try {
       const { userId } = req.user;
@@ -382,7 +392,7 @@ router.get(
 
 router.delete(
   "/api/dashboard/form/:formId",
-  [protect,checkAccountStatus, trackActivity],
+  [protect, checkAccountStatus, trackActivity],
   async (req, res) => {
     try {
       const { formId } = req.params;
@@ -422,7 +432,7 @@ router.delete(
  */
 router.get(
   "/api/dashboard/form/responses/:formId",
-  [protect,checkAccountStatus, trackActivity],
+  [protect, checkAccountStatus, trackActivity],
   async (req, res) => {
     try {
       const { formId } = req.params;
@@ -511,7 +521,6 @@ router.get(
   },
 );
 
-
 /**
  * Update Form Theme
  * PUT /api/dashboard/form/theme/:formId
@@ -520,7 +529,7 @@ router.get(
  */
 router.put(
   "/api/dashboard/form/theme/:formId",
-  [protect, checkAccountStatus,attachPlan,checkLimit("THEME"), trackActivity],
+  [protect, checkAccountStatus, attachPlan, checkLimit("THEME"), trackActivity],
   async (req, res) => {
     try {
       const { userId } = req.user;
@@ -659,31 +668,35 @@ router.post(
  * Get API Keys for the logged-in user
  * GET /api/dashboard/keys
  */
-router.get("/api/dashboard/keys", [protect,checkAccountStatus,trackActivity], async (req, res) => {
-  try {
-    const { userId } = req.user;
+router.get(
+  "/api/dashboard/keys",
+  [protect, checkAccountStatus, trackActivity],
+  async (req, res) => {
+    try {
+      const { userId } = req.user;
 
-    const keys = await prisma.apiKey.findMany({
-      where: { userId },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true, // Needed for the Delete button
-        name: true, // e.g. "Production App"
-        key: true, // The Public Key (pk_live_...)
-        lastUsed: true, // "Last seen 2 mins ago"
-        createdAt: true,
-      },
-    });
+      const keys = await prisma.apiKey.findMany({
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true, // Needed for the Delete button
+          name: true, // e.g. "Production App"
+          key: true, // The Public Key (pk_live_...)
+          lastUsed: true, // "Last seen 2 mins ago"
+          createdAt: true,
+        },
+      });
 
-    res.status(200).json({
-      success: true,
-      data: keys || [],
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "Failed to fetch keys" });
-  }
-});
+      res.status(200).json({
+        success: true,
+        data: keys || [],
+      });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ success: false, message: "Failed to fetch keys" });
+    }
+  },
+);
 
 /**
  * Delete API Key
